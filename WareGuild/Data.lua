@@ -586,6 +586,20 @@ function WG.FindDailyItem()
   local SmithM = {
     --[ItemId] = Num
   }
+  --Finished Products (Sword, Helmet, Staff, Shield, Glyph, Potion, Food...)
+  --[ItemId] = {["ItemLink"], ["Count"] (Units Claimed From the Guild Bank)}
+  local Products = {}
+  local function AddProduct(ItemId, ItemLink, Count)
+    if not ItemId or ItemId == 0 or not Count or Count <= 0 then return end
+    local Old = Products[ItemId]
+    if Old then
+      --Several Sources (Writ Conditions and LazyCrafting) May Claim the Same Product
+      --The Actual Take is Capped by the Guild Bank Availability
+      Old["Count"] = Old["Count"] + Count
+    else
+      Products[ItemId] = {["ItemLink"] = ItemLink, ["Count"] = Count}
+    end
+  end
   --Check Quests
   for a = 1, 25 do
     local Type = select(10, GetJournalQuestInfo(a))
@@ -600,9 +614,34 @@ function WG.FindDailyItem()
         if ItemId ~= 0 then
           --Black/Cloth/Wood/Jewelry
           if Need > 0 and (CraftType == 1 or CraftType == 2 or CraftType == 6 or CraftType == 7) then
-            local RawId, NumPer = unpack(WG.MaterialExcel[CraftType][ItemId][MaterialId])
-            SmithM[RawId] = SmithM[RawId] or 0
-            SmithM[RawId] = SmithM[RawId] + (NumPer * Need)
+            --Finished Product (Shield, Sword, Staff, Helmet...) in the Guild Bank
+            --Fulfilling the Writ: Take It Instead of the Raw Materials
+            --White, no Trait and no Enchantment Like a Fresh Craft
+            local Have = 0
+            if WG.SV.LazyCraftingProduct then
+              --GetNextGuildBankSlotId Returns nil When the Bank is Empty
+              local StartPoint = GetNextGuildBankSlotId()
+              if StartPoint then
+                for i = StartPoint, StartPoint + 500 do
+                  local ItemLink = GetItemLink(3, i)
+                  if ItemLink ~= "" and Have < Need
+                    and GetItemLinkQuality(ItemLink) == ITEM_QUALITY_NORMAL
+                    and GetItemLinkTraitInfo(ItemLink) == ITEM_TRAIT_TYPE_NONE
+                    and DoesItemLinkFulfillJournalQuestCondition(ItemLink, a, 1, b, GetItemCreatorName(3, i) == GetUnitName("player")) then
+                    local Count = select(2, GetItemInfo(3, i))
+                    AddProduct(GetItemLinkItemId(ItemLink), ItemLink, Count)
+                    Have = Have + Count
+                  end
+                end
+              end
+            end
+            --Raw Materials for the Items Still to Craft
+            local Missing = Need - Have
+            if Missing > 0 then
+              local RawId, NumPer = unpack(WG.MaterialExcel[CraftType][ItemId][MaterialId])
+              SmithM[RawId] = SmithM[RawId] or 0
+              SmithM[RawId] = SmithM[RawId] + (NumPer * Missing)
+            end
           end
           --Alchemy and Cook Production
           if Need > 0 and ((CraftType == 4 and MaterialId ~= 0) or CraftType == 5) then
@@ -624,11 +663,31 @@ function WG.FindDailyItem()
           end
           --Enchant Production
           if Need > 0 and CraftType == 3 and MaterialId ~= 0 then
-            local Fork, Rule1 = unpack(WG.MaterialExcel[CraftType]["Id"][ItemId])
-            local Rule2, Rule3 = WG.MaterialExcel[CraftType]["Level"][MaterialId][Fork], WG.MaterialExcel[CraftType]["Quilty"][Quilty]
-            SmithM[Rule1] = 1
-            SmithM[Rule2] = 1
-            SmithM[Rule3] = 1
+            --Finished Glyph in the Guild Bank Fulfilling the Writ
+            local Have = 0
+            if WG.SV.LazyCraftingProduct then
+              --GetNextGuildBankSlotId Returns nil When the Bank is Empty
+              local StartPoint = GetNextGuildBankSlotId()
+              if StartPoint then
+                for i = StartPoint, StartPoint + 500 do
+                  local ItemLink = GetItemLink(3, i)
+                  if ItemLink ~= "" and Have < Need
+                    and DoesItemLinkFulfillJournalQuestCondition(ItemLink, a, 1, b, GetItemCreatorName(3, i) == GetUnitName("player")) then
+                    local Count = select(2, GetItemInfo(3, i))
+                    AddProduct(GetItemLinkItemId(ItemLink), ItemLink, Count)
+                    Have = Have + Count
+                  end
+                end
+              end
+            end
+            --Runes for the Glyphs Still to Craft
+            if Need - Have > 0 then
+              local Fork, Rule1 = unpack(WG.MaterialExcel[CraftType]["Id"][ItemId])
+              local Rule2, Rule3 = WG.MaterialExcel[CraftType]["Level"][MaterialId][Fork], WG.MaterialExcel[CraftType]["Quilty"][Quilty]
+              SmithM[Rule1] = 1
+              SmithM[Rule2] = 1
+              SmithM[Rule3] = 1
+            end
           end
           --Enchant Raw Material
           if Need > 0 and CraftType == 3 and MaterialId == 0 then
@@ -671,13 +730,17 @@ function WG.FindDailyItem()
       table.insert(Materials, {["ItemId"] = ItemId, ["Count"] = Target})
     end
   end
-  --Finished Products (Sword, Helmet, Staff, Shield...)
-  --Retrieve Them from the Guild Bank Instead of the Materials
+  --LazyCrafting Products Merge With the Writ Products
   for ItemId, Product in pairs(LazyP) do
-    local Target = MaterialCount(ItemId, Product["Count"])
-    if Target > 0 then
-      table.insert(Materials, {["ItemLink"] = Product["ItemLink"], ["ItemId"] = ItemId, ["Count"] = Target})
-    end
+    AddProduct(ItemId, Product["ItemLink"], Product["Count"])
+  end
+  --Finished Products (Sword, Helmet, Staff, Shield, Glyph, Potion, Food...)
+  --Retrieve Them from the Guild Bank Instead of the Materials
+  for ItemId, Product in pairs(Products) do
+    --Target: Keep (Current Backbag + Claimed) in the Backbag
+    --The Actual Take is Capped by the Guild Bank Availability
+    local Target = WG.FindItem(1, ItemId, Product["ItemLink"])["Total"] + Product["Count"]
+    table.insert(Materials, {["ItemLink"] = Product["ItemLink"], ["ItemId"] = ItemId, ["Count"] = Target})
   end
   --End
   return Materials

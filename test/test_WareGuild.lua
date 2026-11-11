@@ -37,7 +37,7 @@ end
 GetItemInfo = function(bag, slot)
   -- finished products (gear) do not stack: count 1
   local id = (bag == 1 and Bag[slot]) or (bag == 3 and GuildBank and GuildBank[slot])
-  if id == 45057 or id == 45058 or id == 45059 or id == 45070 or id == 45080 then return true, 1 end
+  if id == 43556 or id == 45057 or id == 45058 or id == 45059 or id == 45070 or id == 45080 then return true, 1 end
   return true, 5
 end
 GetSlotStackSize = function(bag, slot) return 5, 100 end
@@ -63,7 +63,11 @@ GetNextGuildBankSlotId = function()
 end
 GetItemCreatorName = function() return "tester" end
 GetUnitName = function() return "tester" end
-DoesItemLinkFulfillJournalQuestCondition = function() return false end
+-- itemIds currently fulfilling the active writ conditions
+local FulfillItems = {}
+DoesItemLinkFulfillJournalQuestCondition = function(link)
+  return FulfillItems[GetItemLinkItemId(link)] == true
+end
 GetSmithingPatternMaterialItemLink = function(pattern, matIndex, style)
   local id = PatternMat[pattern]
   if not id then return "" end
@@ -482,5 +486,96 @@ GuildBank = {}
 M, P, PR = WG.FindLazyCraftingItem()
 check("provisioning no food: ingredients", M[45100] == 4 and M[45101] == 2)
 check("provisioning no food: no products", next(P) == nil)
+
+-- 22. Writ-driven finished product (no LazyCrafting queue at all)
+-- woodworking writ: 2 maple shields (43556, mat 147 -> 803 x 6 each)
+setLLC(nil)
+GuildBank = {[4] = 43556, [5] = 43556}
+Stacks[803] = {0, 0, 0}
+Stacks[43556] = {0, 0, 0}
+FulfillItems[43556] = true
+Journal[1] = {type = 4, conditions = {{43556, 147, 6, 1, 0, 2}}}
+D = WG.FindDailyItem()
+foundMat, foundProd = nil, nil
+for _, e in ipairs(D) do
+  if e.ItemId == 803 then foundMat = e.Count end
+  if e.ItemId == 43556 then foundProd = e.Count end
+end
+check("writ product: 2 shields taken", foundProd == 2)
+check("writ product: no maple", foundMat == nil)
+
+-- 22b. Writ-driven: partial (1 of 2 shields in bank) -> 1 product + materials for 1
+GuildBank = {[4] = 43556}
+D = WG.FindDailyItem()
+foundMat, foundProd = nil, nil
+for _, e in ipairs(D) do
+  if e.ItemId == 803 then foundMat = e.Count end
+  if e.ItemId == 43556 then foundProd = e.Count end
+end
+check("writ partial: 1 shield taken", foundProd == 1)
+check("writ partial: maple for the missing one", foundMat == 6)
+
+-- 22c. Writ-driven: shield already in bag -> target = bag + claimed
+Bag = {[0] = 43556}
+GuildBank = {[4] = 43556, [5] = 43556}
+D = WG.FindDailyItem()
+foundProd = nil
+for _, e in ipairs(D) do if e.ItemId == 43556 then foundProd = e.Count end end
+check("writ product: bag 1 + claimed 2 -> keep 3", foundProd == 3)
+Bag = {}
+
+-- 22d. Writ-driven: setting off -> materials only
+WG.SV.LazyCraftingProduct = false
+D = WG.FindDailyItem()
+foundMat, foundProd = nil, nil
+for _, e in ipairs(D) do
+  if e.ItemId == 803 then foundMat = e.Count end
+  if e.ItemId == 43556 then foundProd = e.Count end
+end
+check("writ product off: maple full", foundMat == 12)
+check("writ product off: no product", foundProd == nil)
+WG.SV.LazyCraftingProduct = true
+
+-- 22e. Writ-driven: green or traited bank shield ignored
+ProductQuality = 2
+D = WG.FindDailyItem()
+foundMat, foundProd = nil, nil
+for _, e in ipairs(D) do
+  if e.ItemId == 803 then foundMat = e.Count end
+  if e.ItemId == 43556 then foundProd = e.Count end
+end
+check("writ green shield ignored: maple full", foundMat == 12)
+check("writ green shield ignored: no product", foundProd == nil)
+ProductQuality = 1
+ProductTrait = 1
+D = WG.FindDailyItem()
+foundMat, foundProd = nil, nil
+for _, e in ipairs(D) do
+  if e.ItemId == 803 then foundMat = e.Count end
+  if e.ItemId == 43556 then foundProd = e.Count end
+end
+check("writ traited shield ignored: maple full", foundMat == 12)
+check("writ traited shield ignored: no product", foundProd == nil)
+ProductTrait = 0
+
+-- 22f. Writ-driven enchanting: glyph in bank -> glyph taken, no runes
+FulfillItems[43556] = nil
+FulfillItems[45070] = true
+GuildBank = {[7] = 45070}
+Journal[1] = {type = 4, conditions = {
+  -- enchanting writ: glyph, essence 26580, potency level 102 (Ta), white
+  {26580, 102, 3, 1, 0, 1},
+}}
+D = WG.FindDailyItem()
+local foundGlyph, foundRune
+for _, e in ipairs(D) do
+  if e.ItemId == 45070 then foundGlyph = e.Count end
+  if e.ItemId == 45831 or e.ItemId == 45855 or e.ItemId == 45850 then foundRune = true end
+end
+check("writ glyph: glyph taken", foundGlyph == 1)
+check("writ glyph: no runes", foundRune == nil)
+FulfillItems[45070] = nil
+Journal[1] = nil
+
 print(string.format("passed=%d failed=%d", passed, failed))
 if failed > 0 then os.exit(1) end

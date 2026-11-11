@@ -1,5 +1,50 @@
 # CHANGES
 
+## 2026-11-11 - v0.27 (objets finis des writs journaliers sans file LazyCrafting)
+
+**Correction** : la récupération des objets finis en banque de guilde ne
+fonctionnait que via la file d'attente LibLazyCrafting — elle dépendait donc
+de Lazy Writ Crafter et de sa file (souvent vide au moment d'ouvrir la
+banque de guilde). Un bouclier en érable (itemId 43556) présent en banque
+de guilde n'était jamais retiré pour un writ du journal.
+
+### Cause racine
+
+`WG.FindDailyItem()` lisait bien les conditions du writ
+(`GetQuestConditionItemInfo`) mais ne cherchait que les **matériaux bruts**
+(forge / couture / bois / joaillerie / enchantement). La recherche d'objets
+finis existait uniquement dans le parcours de la file LazyCrafting
+(`WG.FindLazyCraftingItem`). Pour un writ du journal sans entrée dans la
+file LLC, aucun objet fini n'était jamais trouvé dans la banque de guilde.
+
+### Correction
+
+- **Parcours du journal de quêtes** : pour chaque condition de writ
+  (forge, couture, bois, joaillerie), la banque de guilde est maintenant
+  balayée avec `DoesItemLinkFulfillJournalQuestCondition` (comme le
+  faisait déjà le code pour l'alchimie et la cuisine). Un objet fini est
+  retenu s'il est **blanc** (`GetItemLinkQuality == ITEM_QUALITY_NORMAL`),
+  **sans trait** (`GetItemLinkTraitInfo == ITEM_TRAIT_TYPE_NONE`) et qu'il
+  remplit la condition du writ, quel que soit son style.
+- **Enchantement** : même balayage pour les glyphes — un glyphe déjà en
+  banque remplace les trois runes.
+- **Matériaux réduits en conséquence** : la quantité de matériaux bruts
+  n'est calculée que pour les objets restant à fabriquer (besoin du writ
+  moins les objets finis trouvés en banque).
+- **Fusion des deux parcours** : les objets finis des writs et ceux de la
+  file LazyCrafting sont fusionnés en une seule étape de retrait
+  (`Count` = contenu actuel du sac + quantité réclamée), plafonnée par la
+  disponibilité de la banque de guilde. L'option « Retirer les objets finis
+  au lieu des matériaux » s'applique donc aussi aux writs journaliers,
+  même sans Lazy Writ Crafter.
+
+### Tests (hors-ligne)
+
+Harnais Lua étendu (74 assertions au total) : retrait de 2 boucliers sans
+aucune file LazyCrafting, couverture partielle (1 objet fini + matériaux du
+manquant), objet déjà dans le sac, option désactivée, bouclier vert ou avec
+trait ignoré, glyphe d'enchantement retenu sans runes.
+
 ## 2026-11-11 - v0.26 (correction objets finis + joaillerie/enchantement/alchimie/cuisine)
 
 **Correction** : la récupération des objets finis ne fonctionnait pas pour les
