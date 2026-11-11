@@ -69,6 +69,9 @@ WG.Lang = {
   ["SETTING_LAZYCRAFTING"] = "使用 LazyCrafting 队列",
   ["SETTING_LAZYCRAFTING_TOOLTIP"] = "开启后，[日常委托取出]步骤还会统计 LazyCrafting（LibLazyCrafting，Lazy Writ Crafter 与 Lazy Set Crafter 使用）队列中待制作物品（锻造/制衣/木工）所需的基础材料。当同一材料同时被委托和队列需要时，只取出较多的数量",
 
+  ["SETTING_LAZYCRAFTING_PRODUCT"] = "取出成品而非材料",
+  ["SETTING_LAZYCRAFTING_PRODUCT_TOOLTIP"] = "开启后，LazyCrafting 队列中的待制作物品（剑、头盔、法杖、盾牌……）会先在背包和公会银行中查找：若已有成品，则直接取出成品而非基础材料（材料数量相应减少）。请求的风格和特性必须是确定的：自由风格选择无法确定最终物品，此时仍取出材料",
+
   ["SETTING_NE_TAKE"] = "物品不足时，取出所有剩余",
   ["SETTING_NE_TAKE_TOOLTIP"] = "关闭时，物品不足将跳过该取出步骤",
   

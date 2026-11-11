@@ -189,6 +189,14 @@ function WG.BuildMenu()
 		setFunc = function(var) WG.SV.LazyCrafting = var end,
     width = "full",
     },
+    { --Take Finished Products Instead of Materials
+		type = "checkbox",
+		name = WG.Lang.SETTING_LAZYCRAFTING_PRODUCT,
+    tooltip = WG.Lang.SETTING_LAZYCRAFTING_PRODUCT_TOOLTIP,
+		getFunc = function() return WG.SV.LazyCraftingProduct end,
+		setFunc = function(var) WG.SV.LazyCraftingProduct = var end,
+    width = "full",
+    },
     {
     type = "divider",
     alpha = 0.2,

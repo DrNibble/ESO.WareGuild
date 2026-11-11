@@ -34,7 +34,12 @@ GetItemLink = function(bag, slot)
   end
   return ""
 end
-GetItemInfo = function(bag, slot) return true, 5 end
+GetItemInfo = function(bag, slot)
+  -- finished products (gear) do not stack: count 1
+  local id = (bag == 1 and Bag[slot]) or (bag == 3 and GuildBank and GuildBank[slot])
+  if id == 45057 or id == 45058 or id == 45059 then return true, 1 end
+  return true, 5
+end
 GetSlotStackSize = function(bag, slot) return 5, 100 end
 GetItemLinkItemId = function(link)
   return tonumber(link:match("item:(%d+):")) or 0
@@ -57,6 +62,14 @@ GetUnitName = function() return "tester" end
 DoesItemLinkFulfillJournalQuestCondition = function() return false end
 GetSmithingPatternMaterialItemLink = function(pattern, matIndex, style)
   local id = PatternMat[pattern]
+  if not id then return "" end
+  return ToLink(id)
+end
+-- smithing pattern -> finished product itemId
+local PatternProduct = {[7] = 45057, [2] = 45058, [3] = 45059}
+GetSmithingPatternResultLink = function(pattern, matIndex, matQty, style, trait, linkStyle)
+  if type(style) ~= "number" or type(trait) ~= "number" then return "" end
+  local id = PatternProduct[pattern]
   if not id then return "" end
   return ToLink(id)
 end
@@ -119,7 +132,7 @@ loadFile("../WareGuild/lang/en.lua")
 loadFile("../WareGuild/Main.lua")
 
 local WG = SDC_WareGuild
-WG.SV = {LazyCrafting = true, IgnoreInventory = false}
+WG.SV = {LazyCrafting = true, LazyCraftingProduct = true, IgnoreInventory = false}
 
 -- ============ LibLazyCrafting stub ============
 local function setLLC(queue)
@@ -127,7 +140,7 @@ local function setLLC(queue)
   else LibLazyCrafting = {craftingQueue = queue} end
 end
 
-local function LLCRequest(station, pattern, matIndex, matQty, smithQty, reqType)
+local function LLCRequest(station, pattern, matIndex, matQty, smithQty, reqType, style, trait)
   return {
     ["type"] = reqType or "smithing",
     ["station"] = station,
@@ -135,6 +148,8 @@ local function LLCRequest(station, pattern, matIndex, matQty, smithQty, reqType)
     ["materialIndex"] = matIndex,
     ["materialQuantity"] = matQty,
     ["smithingQuantity"] = smithQty or 1,
+    ["style"] = style or 3,
+    ["trait"] = trait or 1,
   }
 end
 
@@ -251,6 +266,83 @@ end
 WG.FindItemType(1)
 GetItemLink = realGIL2
 check("FindItemType bag bounds", maxSlot == 11)
+
+
+-- 13. Finished product: fully in guild bank -> product taken, no materials
+setLLC({["A"] = {[1] = {LLCRequest(1, 7, 1, 5, 2)}}}) -- 2 swords of pattern 7
+Stacks[5413] = {0, 0, 0}
+Stacks[45057] = {0, 0, 0}
+GuildBank = {[4] = 45057, [5] = 45057, [6] = 45057}
+Journal[1] = nil
+local P, PR
+M, P, PR = WG.FindLazyCraftingItem()
+check("product in bank: no materials", next(M) == nil)
+check("product in bank: products entry", P[45057] and P[45057]["Count"] == 2)
+check("product in bank: replaced 10", PR[5413] == 10)
+local D = WG.FindDailyItem()
+local foundMat, foundProd
+for _, e in ipairs(D) do
+  if e.ItemId == 5413 then foundMat = e.Count end
+  if e.ItemId == 45057 then foundProd = e.Count end
+end
+check("daily: no material entry", foundMat == nil)
+check("daily: product entry taken", foundProd == 2)
+
+-- 14. Finished product: partial (bank has 1 of 2) -> 1 product + materials x1
+setLLC({["A"] = {[1] = {LLCRequest(1, 7, 1, 5, 2)}}})
+GuildBank = {[4] = 45057}
+Stacks[45057] = {0, 0, 0}
+M, P, PR = WG.FindLazyCraftingItem()
+check("partial: materials reduced to 1 item", M[5413] == 5)
+check("partial: product 1", P[45057]["Count"] == 1)
+check("partial: replaced 5", PR[5413] == 5)
+D = WG.FindDailyItem()
+foundMat, foundProd = nil, nil
+for _, e in ipairs(D) do
+  if e.ItemId == 5413 then foundMat = e.Count end
+  if e.ItemId == 45057 then foundProd = e.Count end
+end
+check("partial daily: materials 5", foundMat == 5)
+check("partial daily: product 1", foundProd == 1)
+
+-- 15. Finished product not found -> materials only
+setLLC({["A"] = {[1] = {LLCRequest(1, 7, 1, 5, 2)}}})
+GuildBank = {}
+M, P, PR = WG.FindLazyCraftingItem()
+check("no product: materials full", M[5413] == 10)
+check("no product: no products", next(P) == nil)
+
+-- 16. Free style choice -> materials only
+setLLC({["A"] = {[1] = {LLCRequest(1, 7, 1, 5, 2, nil, "free style choice")}}})
+GuildBank = {[4] = 45057}
+M, P, PR = WG.FindLazyCraftingItem()
+check("free style: materials full", M[5413] == 10)
+check("free style: no products", next(P) == nil)
+
+-- 17. Setting off -> materials only
+setLLC({["A"] = {[1] = {LLCRequest(1, 7, 1, 5, 2)}}})
+WG.SV.LazyCraftingProduct = false
+M, P, PR = WG.FindLazyCraftingItem()
+check("product setting off: materials full", M[5413] == 10)
+check("product setting off: no products", next(P) == nil)
+WG.SV.LazyCraftingProduct = true
+
+-- 18. Product covers the writ need: writ materials reduced
+-- blacksmith writ: 2 items of pattern 43529, mat 146 (excel: 5413 x 3) => 6
+-- LLC queue: same 2 items, product available in guild bank
+setLLC({["A"] = {[1] = {LLCRequest(1, 7, 1, 5, 2)}}})
+GuildBank = {[4] = 45057, [5] = 45057}
+Stacks[5413] = {0, 0, 0}
+Journal[1] = {type = 4, conditions = {{43529, 146, 1, 1, 0, 2}}}
+D = WG.FindDailyItem()
+foundMat, foundProd = nil, nil
+for _, e in ipairs(D) do
+  if e.ItemId == 5413 then foundMat = e.Count end
+  if e.ItemId == 45057 then foundProd = e.Count end
+end
+check("writ covered by product: no materials", foundMat == nil)
+check("writ covered by product: 2 products", foundProd == 2)
+Journal[1] = nil
 
 print(string.format("passed=%d failed=%d", passed, failed))
 if failed > 0 then os.exit(1) end

@@ -281,12 +281,23 @@ local function MaterialCount(ItemId, NumTotal, Ignore)
 end
 
 --LazyCrafting (LibLazyCrafting) Queue
---Raw Materials (Steel/Textile/Wood) Needed for the Items to Craft
+--Raw Materials (Steel/Textile/Wood) Needed for the Items to Craft,
+--and Finished Products (Sword, Helmet, Staff, Shield...) Already
+--Available in the Backpack or the Guild Bank: When the Finished Product
+--Is Available, It Is Retrieved from the Guild Bank Instead of Withdrawing
+--the Materials (the Material Count Is Reduced Accordingly). The Style and
+--the Trait of the Request Are Required to Build the Result Link: with a
+--Free Style Choice (LLC_FREE_STYLE_CHOICE) the Final Item Cannot Be
+--Determined and Only the Materials Are Counted.
+--Returns: Materials[ItemId] = Count, Products[ItemId] = {ItemLink, Count},
+--Replaced[ItemId] = Count (Materials Covered by the Products)
 function WG.FindLazyCraftingItem()
   local Materials = {}
+  local Products = {}
+  local Replaced = {}
   --Setting Off or LibLazyCrafting Missing
-  if not WG.SV.LazyCrafting then return Materials end
-  if not LibLazyCrafting or type(LibLazyCrafting.craftingQueue) ~= "table" then return Materials end
+  if not WG.SV.LazyCrafting then return Materials, Products, Replaced end
+  if not LibLazyCrafting or type(LibLazyCrafting.craftingQueue) ~= "table" then return Materials, Products, Replaced end
   --Station: 1 BlackSmith(Steel) 2 Clothier(Textile) 6 Woodworking(Wood)
   local StationList = {
     [CRAFTING_TYPE_BLACKSMITHING] = true,
@@ -302,14 +313,48 @@ function WG.FindLazyCraftingItem()
             local Request = List[i]
             if type(Request) == "table" and Request["type"] == "smithing"
               and Request["pattern"] and Request["materialIndex"] then
+              --Number of Items Requested
+              local Num = Request["smithingQuantity"] or 1
+              --Finished Product (Sword, Helmet, Staff, Shield...)
+              --Style and Trait Are Required to Build the Result Link
+              local Have = 0
+              local ProductId, ProductLink
+              if WG.SV.LazyCraftingProduct
+                and type(Request["style"]) == "number" and type(Request["trait"]) == "number" then
+                ProductLink = GetSmithingPatternResultLink(
+                  Request["pattern"], Request["materialIndex"],
+                  Request["materialQuantity"] or 1, Request["style"], Request["trait"], 0)
+                if ProductLink ~= "" then
+                  ProductId = GetItemLinkItemId(ProductLink)
+                  if not ProductId or ProductId == 0 then ProductId = nil end
+                end
+                --Stacks in the Backpack and the Guild Bank
+                if ProductId then
+                  local FindBag = WG.FindItem(1, ProductId, nil)
+                  local FindBank = WG.FindItem(3, ProductId, nil)
+                  Have = math.min(Num, (FindBag and FindBag["Total"] or 0) + (FindBank and FindBank["Total"] or 0))
+                end
+              end
               --Material Link of this Pattern and Tier
               local Link = GetSmithingPatternMaterialItemLink(Request["pattern"], Request["materialIndex"], 0)
+              local ItemId, Per
               if Link ~= "" then
-                local ItemId = GetItemLinkItemId(Link)
-                local Num = (Request["materialQuantity"] or 0) * (Request["smithingQuantity"] or 1)
-                if ItemId and ItemId ~= 0 and Num > 0 then
-                  Materials[ItemId] = (Materials[ItemId] or 0) + Num
+                ItemId = GetItemLinkItemId(Link)
+                Per = Request["materialQuantity"] or 0
+              end
+              --Take the Finished Product Instead of the Materials
+              if Have > 0 and ItemId and ItemId ~= 0 and Per > 0 then
+                Num = Num - Have
+                if not Products[ProductId] then
+                  Products[ProductId] = {["ItemLink"] = ProductLink, ["Count"] = 0}
                 end
+                Products[ProductId]["Count"] = Products[ProductId]["Count"] + Have
+                --Materials Covered by the Product (Writs Need Less)
+                Replaced[ItemId] = (Replaced[ItemId] or 0) + Per * Have
+              end
+              --Materials for the Items Still to Craft
+              if Num > 0 and ItemId and ItemId ~= 0 and Per > 0 then
+                Materials[ItemId] = (Materials[ItemId] or 0) + Per * Num
               end
             end
           end
@@ -317,7 +362,7 @@ function WG.FindLazyCraftingItem()
       end
     end
   end
-  return Materials
+  return Materials, Products, Replaced
 end
 
 --Find Missing Item for Daily Writs
@@ -392,8 +437,15 @@ function WG.FindDailyItem()
     end
   end
   --LazyCrafting Queue (Items to Craft: Steel/Textile/Wood)
+  --Finished Products Available Replace the Raw Materials
+  local LazyM, LazyP, LazyR = WG.FindLazyCraftingItem()
+  --Products Cover the Writ Crafts Too: Reduce the Writ Material Need
+  for ItemId, Count in pairs(LazyR) do
+    if SmithM[ItemId] then
+      SmithM[ItemId] = math.max(0, SmithM[ItemId] - Count)
+    end
+  end
   --Take Max Per Item to Avoid Double Counting with the Writ Conditions
-  local LazyM = WG.FindLazyCraftingItem()
   for ItemId, Count in pairs(LazyM) do
     if not SmithM[ItemId] or SmithM[ItemId] < Count then
       SmithM[ItemId] = Count
@@ -404,6 +456,14 @@ function WG.FindDailyItem()
     local Target = MaterialCount(ItemId, Count)
     if Target > 0 then
       table.insert(Materials, {["ItemId"] = ItemId, ["Count"] = Target})
+    end
+  end
+  --Finished Products (Sword, Helmet, Staff, Shield...)
+  --Retrieve Them from the Guild Bank Instead of the Materials
+  for ItemId, Product in pairs(LazyP) do
+    local Target = MaterialCount(ItemId, Product["Count"])
+    if Target > 0 then
+      table.insert(Materials, {["ItemLink"] = Product["ItemLink"], ["ItemId"] = ItemId, ["Count"] = Target})
     end
   end
   --End

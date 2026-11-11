@@ -3,7 +3,7 @@ local WG = SDC_WareGuild
 WG.name = "WareGuild"
 WG.title = "WareGuild"
 WG.author = "@MelanAster"
-WG.version = "0.24"
+WG.version = "0.25"
 
 --Default Setting
 WG.Default = {
@@ -15,6 +15,7 @@ WG.Default = {
   
   KeepCraft = true,
   LazyCrafting = true,
+  LazyCraftingProduct = true,
   NE_Take = false,
   NE_Store = false,
   Log = true,

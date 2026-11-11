@@ -1,0 +1,117 @@
+local WG = SDC_WareGuild
+
+--[[
+For translation, you have to copy this file and rename it in xx.lua, and translated the strings below. 
+you can get the xx for your language by typing following line in game chat
+/script d(GetCVar("language.2"))
+]]
+
+WG.Lang = {
+  --Craft Type, No Need to Translate
+  ["BLACKSMITH"] = GetString(SI_ITEMFILTERTYPE13),
+  ["CLOTH"] = GetString(SI_ITEMFILTERTYPE14),
+  ["ENCHANT"] = GetString(SI_ITEMFILTERTYPE17),
+  ["ALCHEMY"] = GetString(SI_ITEMFILTERTYPE16),
+  ["COOK"] = GetString(SI_ITEMFILTERTYPE18),
+  ["WOOD"] = GetString(SI_ITEMFILTERTYPE15),
+  ["JEWELRY"] = GetString(SI_ITEMFILTERTYPE25),
+  
+  ["STYLE"] = GetString(SI_ITEMFILTERTYPE19),
+  ["TRAIT"] = GetString(SI_ITEMFILTERTYPE20),
+  
+  --Info Displayed in Chat Window, Need to Translate
+  
+  ["CHAT_FUZZY"] = " (correspondance approximative)", --Added to ItemName Matched by ItemId
+  
+  ["CHAT_TAKE_TO"] = "Garder <<1>> x <<2>>", -- <<1>> ItemName, <<2>> Quantity
+  ["CHAT_TAKE_ALL"] = "Retirer tous les <<1>>", -- <<1>> ItemName
+  
+  ["CHAT_STORE_TO"] = "Garder <<1>> x <<2>>", -- <<1>> ItemName, <<2>> Quantity
+  ["CHAT_STORE_ALL"] = "Déposer tous les <<1>>", -- <<1>> ItemName
+  ["CHAT_STORE_ALL_TYPE"] = "Déposer tous les matériaux <<1>>", -- <<1>> Craft Type
+  
+  ["CHAT_DAILY_WRITS"] = "Retirer les objets pour les commandes journalières",
+  
+  ["CHAT_NE_TAKE"] = "[<<1>>] Quantité insuffisante de <<2>> à retirer", -- <<1>> Guild Name, <<2>> ItemName
+  ["CHAT_NE_STORE"] = "[<<1>>] Quantité insuffisante de <<2>> à déposer", -- <<1>> Guild Name, <<2>> ItemName
+  
+  ["CHAT_DONE"] = "Terminé !",
+  ["CHAT_NO_WORK"] = "Rien à faire !",
+  ["CHAT_STOP"] = "Arrêt !",
+  ["CHAT_ERROR"] = "Une erreur s'est produite",
+  
+  ["CHAT_BACKBAG_FULL"] = "Sac à dos plein",
+  ["CHAT_GUILD_BANK_FULL"] = "Banque de guilde pleine",
+  
+  --Setting, Need to Translate
+  
+  ["SETTING_CHARACTER_CONFIG"] = "Configuration par personnage",
+  ["SETTING_CHARACTER_CONFIG_TOOLTIP"] = "Par défaut, utilise la configuration du compte",
+  
+  ["SETTING_AUTO_OPEN_STORE"] = "Ouvrir automatiquement les banques de guilde pour le stockage",
+  ["SETTING_AUTO_OPEN_STORE_TOOLTIP"] = "Fonctionne uniquement quand WG trouve des objets à stocker.\r\nSans effet sur [Déposer jusqu'à x]", -- \r\n Line Feed
+  
+  ["SETTING_AUTO_OPEN_WRITS"] = "Ouvrir automatiquement les banques de guilde pour les commandes journalières",
+  ["SETTING_AUTO_OPEN_WRITS_TOOLTIP"] = "Fonctionne uniquement quand l'étape [Retirer pour commandes journalières] existe et que vous avez des commandes journalières",
+  
+  ["SETTING_AUTO_CLOSE"] = "Fermer automatiquement les banques de guilde",
+  ["SETTING_AUTO_CLOSE_TOOLTIP"] = "Fonctionne uniquement après que WG a réellement déplacé des objets",
+  
+  ["SETTING_STEPS_LOG"] = "Afficher le journal des opérations",
+  ["SETTING_STEPS_LOG_TOOLTIP"] = "Affiche dans la fenêtre de discussion ce que WG a réellement fait à chaque étape",
+  
+  ["SETTING_BAN_STORE_WRITS"] = "Désactiver les dépôts quand des commandes journalières sont actives",
+  ["SETTING_BAN_STORE_WRITS_TOOLTIP"] = "Si vous utilisez les banques de guilde pour les commandes journalières, activez cette option",
+  
+  ["SETTING_IGNORE_INVENTORY"] = "[Retirer pour commandes journalières] Ignorer l'inventaire",
+  ["SETTING_IGNORE_INVENTORY_TOOLTIP"] = "Quand activé, cette étape ignore les matériaux déjà présents dans votre sac à dos, votre banque personnelle et vos sacs d'artisanat pour fabriquer les productions requises. (Par exemple, 42 matériaux sont nécessaires et 30 sont déjà disponibles. Une fois activé, WG tentera de retirer 42 matériaux de la banque de guilde au lieu de 12)",
+  
+  ["SETTING_LAZYCRAFTING"] = "Utiliser la file d'attente LazyCrafting",
+  ["SETTING_LAZYCRAFTING_TOOLTIP"] = "Quand activé, [Retirer pour commandes journalières] compte aussi les matériaux bruts (forge / couture / travail du bois) nécessaires aux objets en file d'attente dans LazyCrafting (LibLazyCrafting, utilisé par Lazy Writ Crafter et Lazy Set Crafter). Quand le même matériau est demandé à la fois par les commandes et par la file d'attente, seule la quantité la plus grande est retirée",
+
+  ["SETTING_LAZYCRAFTING_PRODUCT"] = "Retirer les objets finis au lieu des matériaux",
+  ["SETTING_LAZYCRAFTING_PRODUCT_TOOLTIP"] = "Quand activé, les objets en file d'attente dans LazyCrafting (épée, casque, bâton, bouclier...) sont d'abord recherchés dans votre sac à dos et les banques de guilde : si l'objet fini s'y trouve déjà, il est retiré directement au lieu des matériaux bruts (la quantité de matériaux est réduite en conséquence). Le style et le trait de la demande doivent être fixés : avec un style libre, l'objet final ne peut pas être déterminé et les matériaux sont retirés",
+
+  ["SETTING_NE_TAKE"] = "En cas de quantité insuffisante, retirer le reste",
+  ["SETTING_NE_TAKE_TOOLTIP"] = "Quand désactivé, les étapes de retrait sont ignorées en cas de manque d'objets",
+  
+  ["SETTING_NE_STORE"] = "En cas de quantité insuffisante, déposer le reste",
+  ["SETTING_NE_STORE_TOOLTIP"] = "Quand désactivé, les étapes de dépôt sont complètement ignorées en cas de manque d'objets",
+  
+  ["SETTING_IGNORE_FCOIS"] = "Ignorer FCO ItemSaver",
+  ["SETTING_IGNORE_FCOIS_TOOLTIP"] = "Ignore les restrictions de FCO ItemSaver sur le dépôt / le retrait d'objets de la banque de guilde",
+  
+  ["SETTING_HEADER_SELECT_GUILD"] = "Sélectionner les banques de guilde",
+  ["SETTING_GUILD_TIPS"] = "Astuces :\r\nTraitement dans l'ordre, assurez-vous d'avoir accès aux banques de guilde\r\nL'interface doit être rechargée après avoir rejoint une nouvelle guilde", -- \r\n Line Feed
+  
+  ["GUILD_ITEM_SCROLL"] = "Sélectionner un objet du sac à dos pour créer des étapes",
+  
+  ["GUILD_FUZZY"] = "Correspondance approximative",
+  ["GUILD_FUZZY_TOOLTIP"] = "Correspondance par lien d'objet ou ItemId (mode approximatif). Activation déconseillée",
+  
+  ["GUILD_UPDATE_ITEM_LIST"] = "Mettre à jour la liste des objets",
+  ["GUILD_TAKE_ALL"] = "Tout retirer",
+  ["GUILD_STORE_ALL"] = "Tout déposer",
+  
+  ["GUILD_TAKE_TO_SLIDER"] = "Garder x ? objets dans le sac à dos",
+  ["GUILD_TAKE_TO"] = "Retirer jusqu'à x",
+  
+  ["GUILD_STORE_TO_SLIDER"] = "Garder x ? objets dans la banque de guilde",
+  ["GUILD_STORE_TO"] = "Déposer jusqu'à x",
+  
+  ["GUILD_STORE_ALL_TYPE_DROP"] = "Sélectionner le type de matériaux à déposer",
+  ["GUILD_STORE_ALL_TYPE"] = "Déposer les matériaux d'artisanat",
+  
+  ["GUILD_TAKE_WRITS"] = "Retirer pour commandes journalières",
+  ["GUILD_TAKE_WRITS_TOOLTIP"] = "Nécessite d'avoir accepté les commandes journalières au préalable !\nChaque guilde n'a besoin d'être ajoutée qu'une fois, les règles sont les suivantes :\nRetirer les matériaux bruts manquants pour la forge, la couture, le travail du bois, la joaillerie et l'enchantement\nRetirer les objets finis pour la cuisine et l'alchimie\nRetirer les matériaux à remettre pour l'enchantement et l'alchimie\n*Les matériaux de style ne sont pas inclus",
+  
+  ["GUILD_HEADER_STEPS"] = "Étapes de fonctionnement",
+  ["GUILD_STEPS_SLIDER"] = "Sélectionner la ligne de l'étape",
+  ["GUILD_STEPS_EMPTY"] = "Étapes vides",
+  ["GUILD_STEPS_DELETE"] = "Supprimer l'étape sélectionnée",
+  
+  ["CLIP"] = "Presse-papiers",
+  ["CLIP_PASTE"] = "Coller",
+  
+  ["SETTING_BOTTOM_TIPS"] = "Il est recommandé de lire les instructions détaillées de WG sur ESOUI",
+}
