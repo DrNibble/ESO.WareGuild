@@ -70,7 +70,7 @@ WG.Lang = {
   ["SETTING_LAZYCRAFTING_TOOLTIP"] = "When on, [Withdraw for Daily Writs] also counts the raw materials (Blacksmith/Clothing/Woodworking) needed by the items queued in LazyCrafting (LibLazyCrafting, used by Lazy Writ Crafter and Lazy Set Crafter). When the same material is needed by both the writs and the queue, only the larger amount is withdrawn",
 
   ["SETTING_LAZYCRAFTING_PRODUCT"] = "Take Finished Products Instead of Materials",
-  ["SETTING_LAZYCRAFTING_PRODUCT_TOOLTIP"] = "When on, the items queued in LazyCrafting (sword, helmet, staff, shield...) are first searched in your backpack and the guild banks: when the finished product is already there, it is withdrawn directly instead of the raw materials (the material count is reduced accordingly). The style and the trait of the request must be fixed: with a free style choice the final item cannot be determined and the materials are taken",
+  ["SETTING_LAZYCRAFTING_PRODUCT_TOOLTIP"] = "When on, the items queued in LazyCrafting (sword, helmet, staff, shield...) are first searched in your backpack and the guild banks: when the finished product is already there, it is withdrawn directly instead of the raw materials (the material count is reduced accordingly). Daily writs products are matched whatever the style, without trait and white quality only (any style is used, including free style choices); requests with a trait or a set take the materials only. Jewelry, enchanting, alchemy and cooking are supported too when LibLazyCrafting queues them",
 
   ["SETTING_NE_TAKE"] = "When Not Enough, Withdraw the Remaining",
   ["SETTING_NE_TAKE_TOOLTIP"] = "When off, withdraw steps were skipped for lack of items",

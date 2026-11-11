@@ -19,7 +19,7 @@ local GuildBank = nil
 -- per-item totals: backbag / bank / craftbag
 local Stacks = {}
 -- smithing pattern -> material itemId
-local PatternMat = {[7] = 5413, [2] = 811, [3] = 803}
+local PatternMat = {[7] = 5413, [2] = 811, [3] = 803, [4] = 135138}
 
 local function ToLink(id)
   return "|H1:item:" .. tostring(id) .. ":30:1:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0|h|h"
@@ -37,7 +37,7 @@ end
 GetItemInfo = function(bag, slot)
   -- finished products (gear) do not stack: count 1
   local id = (bag == 1 and Bag[slot]) or (bag == 3 and GuildBank and GuildBank[slot])
-  if id == 45057 or id == 45058 or id == 45059 then return true, 1 end
+  if id == 45057 or id == 45058 or id == 45059 or id == 45070 or id == 45080 then return true, 1 end
   return true, 5
 end
 GetSlotStackSize = function(bag, slot) return 5, 100 end
@@ -54,8 +54,12 @@ GetItemLinkStacks = function(link)
 end
 GetNextGuildBankSlotId = function()
   if not GuildBank then return nil end
-  for slot in pairs(GuildBank) do return slot end
-  return nil
+  -- real guild bank slots are contiguous: return the first (lowest) slot
+  local First
+  for slot in pairs(GuildBank) do
+    if not First or slot < First then First = slot end
+  end
+  return First
 end
 GetItemCreatorName = function() return "tester" end
 GetUnitName = function() return "tester" end
@@ -66,12 +70,49 @@ GetSmithingPatternMaterialItemLink = function(pattern, matIndex, style)
   return ToLink(id)
 end
 -- smithing pattern -> finished product itemId
-local PatternProduct = {[7] = 45057, [2] = 45058, [3] = 45059}
+local PatternProduct = {[7] = 45057, [2] = 45058, [3] = 45059, [4] = 135140}
+-- product quality/trait: daily writ products are white, no trait
+local ProductQuality = 1 -- ITEM_QUALITY_NORMAL
+local ProductTrait = 0 -- ITEM_TRAIT_TYPE_NONE
+ITEM_QUALITY_NORMAL = 1
+ITEM_TRAIT_TYPE_NONE = 0
 GetSmithingPatternResultLink = function(pattern, matIndex, matQty, style, trait, linkStyle)
-  if type(style) ~= "number" or type(trait) ~= "number" then return "" end
   local id = PatternProduct[pattern]
   if not id then return "" end
   return ToLink(id)
+end
+GetItemLinkQuality = function(link) return ProductQuality end
+GetItemLinkTraitInfo = function(link) return ProductTrait end
+-- enchanting: glyph product of the three runes
+GetEnchantingResultingItemLink = function(pBag, pSlot, eBag, eSlot, aBag, aSlot, style)
+  return ToLink(45070)
+end
+-- alchemy: potion product of solvent + reagents
+GetAlchemyResultingItemLink = function(sBag, sSlot, r1Bag, r1Slot, r2Bag, r2Slot, r3Bag, r3Slot, style)
+  return ToLink(45080)
+end
+-- provisioning: recipe -> ingredients {itemId, qty}, result, result quantity per craft
+local RecipeData = {
+  [1] = {ingredients = {{45100, 2}, {45101, 1}}, result = 45110, resultQty = 4},
+}
+GetRecipeInfo = function(listIndex, recipeIndex)
+  local r = RecipeData[listIndex]
+  if not r then return true, "Recipe", 0, 1, 1, 0, 5, 0 end
+  return true, "Recipe", #r.ingredients, 1, 1, 0, 5, r.result
+end
+GetRecipeIngredientItemLink = function(li, ri, i, style)
+  local r = RecipeData[li]
+  if not r or not r.ingredients[i] then return "" end
+  return ToLink(r.ingredients[i][1])
+end
+GetRecipeIngredientRequiredQuantity = function(li, ri, i)
+  return RecipeData[li].ingredients[i][2]
+end
+GetRecipeResultItemLink = function(li, ri, style)
+  return ToLink(RecipeData[li].result)
+end
+GetRecipeResultQuantity = function(li, ri, n)
+  return RecipeData[li].resultQty * (n or 1)
 end
 
 -- quest journal: [index] = {type, {{itemId, materialId, craftType, quality, cur, max}}}
@@ -161,14 +202,14 @@ setLLC({
     [1] = {LLCRequest(1, 7, 1, 5, 2)},             -- steel: 5 x 2 = 10
     [2] = {LLCRequest(2, 2, 1, 3)},                -- textile: 3 x 1 = 3
     [6] = {LLCRequest(6, 3, 1, 4, 1)},             -- wood: 4
-    [7] = {LLCRequest(7, 7, 1, 9)},                -- jewelry: ignored (not in list)
+    [7] = {LLCRequest(7, 4, 1, 9)},               -- jewelry: 9 (now supported)
   },
 })
 local M = WG.FindLazyCraftingItem()
 check("LLC steel 10", M[5413] == 10)
 check("LLC textile 3", M[811] == 3)
 check("LLC wood 4", M[803] == 4)
-check("LLC jewelry ignored", M[135138] == nil)
+check("LLC jewelry 9", M[135138] == 9)
 
 -- 2. multiple requests same material accumulate
 setLLC({["A"] = {[1] = {LLCRequest(1, 7, 1, 5), LLCRequest(1, 7, 1, 3)}}})
@@ -312,12 +353,47 @@ M, P, PR = WG.FindLazyCraftingItem()
 check("no product: materials full", M[5413] == 10)
 check("no product: no products", next(P) == nil)
 
--- 16. Free style choice -> materials only
+-- 16. Free style choice -> any style used: product taken anyway
 setLLC({["A"] = {[1] = {LLCRequest(1, 7, 1, 5, 2, nil, "free style choice")}}})
-GuildBank = {[4] = 45057}
+GuildBank = {[4] = 45057, [5] = 45057}
+Stacks[45057] = {0, 0, 0}
 M, P, PR = WG.FindLazyCraftingItem()
-check("free style: materials full", M[5413] == 10)
-check("free style: no products", next(P) == nil)
+check("free style: product taken", P[45057] and P[45057]["Count"] == 2)
+check("free style: no materials", M[5413] == nil)
+
+-- 16b. request with a trait -> materials only
+setLLC({["A"] = {[1] = {LLCRequest(1, 7, 1, 5, 2, nil, 3, 5)}}})
+M, P, PR = WG.FindLazyCraftingItem()
+check("trait request: materials full", M[5413] == 10)
+check("trait request: no products", next(P) == nil)
+
+-- 16c. set request -> materials only
+setLLC({["A"] = {[1] = {{["type"] = "smithing", ["pattern"] = 7, ["materialIndex"] = 1,
+  ["materialQuantity"] = 5, ["smithingQuantity"] = 2, ["style"] = 3, ["trait"] = 1,
+  ["setIndex"] = 1}}}})
+M, P, PR = WG.FindLazyCraftingItem()
+check("set request: materials full", M[5413] == 10)
+check("set request: no products", next(P) == nil)
+
+-- 16d. non-white bank product ignored
+setLLC({["A"] = {[1] = {LLCRequest(1, 7, 1, 5, 2)}}})
+ProductQuality = 2
+M, P, PR = WG.FindLazyCraftingItem()
+check("green product ignored: materials full", M[5413] == 10)
+check("green product ignored: no products", next(P) == nil)
+ProductQuality = 1
+
+-- 16e. traited bank product ignored
+ProductTrait = 1
+M, P, PR = WG.FindLazyCraftingItem()
+check("traited product ignored: materials full", M[5413] == 10)
+check("traited product ignored: no products", next(P) == nil)
+ProductTrait = 0
+
+-- 16f. jewelry station (7) counted
+setLLC({["A"] = {[7] = {LLCRequest(7, 4, 1, 3)}}})
+M, P, PR = WG.FindLazyCraftingItem()
+check("jewelry materials", M[135138] == 3)
 
 -- 17. Setting off -> materials only
 setLLC({["A"] = {[1] = {LLCRequest(1, 7, 1, 5, 2)}}})
@@ -344,5 +420,67 @@ check("writ covered by product: no materials", foundMat == nil)
 check("writ covered by product: 2 products", foundProd == 2)
 Journal[1] = nil
 
+
+-- 19. Enchanting: runes and glyph in guild bank -> glyph taken, no runes
+setLLC({["A"] = {[3] = {{["potencyItemID"] = 44560, ["essenceItemID"] = 44561,
+  ["aspectItemID"] = 44562, ["quantity"] = 2, ["station"] = 3}}}})
+GuildBank = {[7] = 44560, [8] = 44561, [9] = 44562, [10] = 45070, [11] = 45070}
+Stacks[45070] = {0, 0, 0}
+M, P, PR = WG.FindLazyCraftingItem()
+check("enchanting: glyph product", P[45070] and P[45070]["Count"] == 2)
+check("enchanting: no runes", M[44560] == nil and M[44561] == nil and M[44562] == nil)
+check("enchanting: runes replaced", PR[44560] == 2 and PR[44561] == 2 and PR[44562] == 2)
+local D = WG.FindDailyItem()
+local foundGlyph
+for _, e in ipairs(D) do if e.ItemId == 45070 then foundGlyph = e.Count end end
+check("enchanting daily: glyph withdrawn", foundGlyph == 2)
+
+-- 19b. Enchanting: glyph not in bank -> runes only
+setLLC({["A"] = {[3] = {{["potencyItemID"] = 44560, ["essenceItemID"] = 44561,
+  ["aspectItemID"] = 44562, ["quantity"] = 2}}}})
+GuildBank = {[7] = 44560, [8] = 44561, [9] = 44562}
+M, P, PR = WG.FindLazyCraftingItem()
+check("enchanting no glyph: runes", M[44560] == 2 and M[44561] == 2 and M[44562] == 2)
+check("enchanting no glyph: no products", next(P) == nil)
+
+-- 20. Alchemy: reagents and potion in guild bank -> potion taken
+setLLC({["A"] = {[4] = {{["solventId"] = 44570, ["reagentId1"] = 44571,
+  ["reagentId2"] = 44572, ["timesToMake"] = 2, ["station"] = 4}}}})
+GuildBank = {[7] = 44570, [8] = 44571, [9] = 44572, [10] = 45080, [11] = 45080}
+Stacks[45080] = {0, 0, 0}
+M, P, PR = WG.FindLazyCraftingItem()
+check("alchemy: potion product", P[45080] and P[45080]["Count"] == 2)
+check("alchemy: no materials", M[44570] == nil and M[44571] == nil and M[44572] == nil)
+
+-- 20b. Alchemy: potion not in bank -> materials only
+setLLC({["A"] = {[4] = {{["solventId"] = 44570, ["reagentId1"] = 44571,
+  ["reagentId2"] = 44572, ["timesToMake"] = 2}}}})
+GuildBank = {[7] = 44570, [8] = 44571, [9] = 44572}
+M, P, PR = WG.FindLazyCraftingItem()
+check("alchemy no potion: materials", M[44570] == 2 and M[44571] == 2 and M[44572] == 2)
+check("alchemy no potion: no products", next(P) == nil)
+
+-- 21. Provisioning: food in guild bank covers the crafts
+-- recipe 1: 2x45100 + 1x45101 -> 4x45110 per craft, 2 crafts requested
+setLLC({["A"] = {[5] = {{["recipeListIndex"] = 1, ["recipeIndex"] = 1,
+  ["timesToMake"] = 2, ["station"] = 5}}}})
+GuildBank = {[10] = 45110, [11] = 45110, [12] = 45110, [13] = 45110,
+  [14] = 45110, [15] = 45110, [16] = 45110, [17] = 45110}
+Stacks[45110] = {0, 0, 0}
+M, P, PR = WG.FindLazyCraftingItem()
+check("provisioning: food product", P[45110] and P[45110]["Count"] == 8)
+check("provisioning: no ingredients", M[45100] == nil and M[45101] == nil)
+
+-- 21b. Provisioning: partial food (1 stack of 5, 8 needed) -> 1 craft of ingredients
+GuildBank = {[10] = 45110}
+M, P, PR = WG.FindLazyCraftingItem()
+check("provisioning partial: food 5", P[45110]["Count"] == 5)
+check("provisioning partial: ingredients 1 craft", M[45100] == 2 and M[45101] == 1)
+
+-- 21c. Provisioning: no food -> ingredients only
+GuildBank = {}
+M, P, PR = WG.FindLazyCraftingItem()
+check("provisioning no food: ingredients", M[45100] == 4 and M[45101] == 2)
+check("provisioning no food: no products", next(P) == nil)
 print(string.format("passed=%d failed=%d", passed, failed))
 if failed > 0 then os.exit(1) end

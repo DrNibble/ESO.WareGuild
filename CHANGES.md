@@ -1,5 +1,54 @@
 # CHANGES
 
+## 2026-11-11 - v0.26 (correction objets finis + joaillerie/enchantement/alchimie/cuisine)
+
+**Correction** : la récupération des objets finis ne fonctionnait pas pour les
+writs journaliers — Lazy Writ Crafter met les crafts de writ en file
+LibLazyCrafting avec un style libre (`LLC_FREE_STYLE_CHOICE`, une chaîne de
+caractères), et l'ancien code exigeait un style numérique pour construire le
+lien de l'objet final. Les matériaux étaient donc toujours retirés.
+
+### Correction et précision de l'appariement (writs journaliers)
+
+- Les objets finis des commandes journalières sont appariés **quel que soit le
+  style, sans trait et de qualité blanche uniquement** : n'importe quel style
+  est utilisé pour construire le lien (`GetSmithingPatternResultLink` — le
+  style ne change pas l'ItemId), et les piles du sac / de la banque de guilde
+  sont filtrées par `GetItemLinkQuality == ITEM_QUALITY_NORMAL` et
+  `GetItemLinkTraitInfo == ITEM_TRAIT_TYPE_NONE`.
+- Une requête **avec trait** ou **d'ensemble** (`setIndex`) ne peut pas être
+  satisfaite par un objet blanc sans trait : matériaux uniquement.
+- **Joaillerie** : station 7 (`CRAFTING_TYPE_JEWELRYCRAFTING`) ajoutée au
+  traitement smithing (matériaux + objets finis).
+
+### Enchantement / Alchimie / Cuisine (pris en charge par LibLazyCrafting)
+
+- **Enchantement** : matériaux = les trois runes (`potencyItemID` /
+  `essenceItemID` / `aspectItemID` × `quantity`) ; objet fini = le glyphe,
+  calculé via `GetEnchantingResultingItemLink` (les slots des runes sont
+  cherchés dans le sac puis la banque de guilde).
+- **Alchimie** : matériaux = solvant + réactifs (`solventId`, `reagentId1-3` ×
+  `timesToMake`) ; objet fini = la potion, via `GetAlchemyResultingItemLink`.
+- **Cuisine** : matériaux = les ingrédients de la recette
+  (`GetRecipeIngredientItemLink` + `GetRecipeIngredientRequiredQuantity` ×
+  `timesToMake`) ; objet fini = le plat, via `resultLink` de la requête LLC ou
+  `GetRecipeResultItemLink` (couverture partielle : la quantité par craft de
+  `GetRecipeResultQuantity` est prise en compte).
+- Ces matériaux sont fusionnés avec les besoins des writs (maximum par objet),
+  et la mécanique « l'objet fini remplace les matériaux » s'applique aussi
+  bien au file LLC qu'aux besoins matériaux des writs.
+
+### Limites
+
+- Les objets finis doivent se trouver dans la **même banque de guilde** que
+  l'étape « Retirer pour commandes journalières » (l'API du jeu n'expose que
+  la banque de guilde actuellement sélectionnée).
+- Glyphes / potions / plats : appariement par ItemId exact (le lien résultat
+  encode l'objet précis) ; le filtre blanc/sans trait ne s'applique qu'aux
+  objets d'équipement smithing dont l'ItemId n'encode ni trait ni qualité.
+- Non testé dans ESO : validation hors jeu uniquement (compilation Lua 5.1
+  et harnais de tests avec file LLC simulée — 61 assertions).
+
 ## 2026-11-11 - v0.25 (récupération des objets finis + traduction française)
 
 **Objectif** : récupérer automatiquement en banque de guilde l'objet final (épée,
