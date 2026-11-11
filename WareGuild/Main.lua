@@ -3,7 +3,7 @@ local WG = SDC_WareGuild
 WG.name = "WareGuild"
 WG.title = "WareGuild"
 WG.author = "@MelanAster"
-WG.version = "0.23"
+WG.version = "0.24"
 
 --Default Setting
 WG.Default = {
@@ -14,6 +14,7 @@ WG.Default = {
   AutoClose = true,
   
   KeepCraft = true,
+  LazyCrafting = true,
   NE_Take = false,
   NE_Store = false,
   Log = true,
@@ -209,7 +210,7 @@ function WG.FindItem(BagId, ItemId, ItemLink)
   
   --BackBag
   if BagId == 1 then
-    for i = 0, GetBagSize(1) do
+    for i = 0, GetBagSize(1) - 1 do
       local Link = GetItemLink(1, i)
       if not IsItemLinkStolen(Link) and FCOISAllow(1, i) and DoesItemMatch(Link, ItemId, ItemLink) then
         local count = select(2, GetItemInfo(1, i))
@@ -220,13 +221,16 @@ function WG.FindItem(BagId, ItemId, ItemLink)
 
   --Current Guild Bank
   elseif BagId == 3 then
+    --GetNextGuildBankSlotId Returns nil When the Bank is Empty
     local StartPoint = GetNextGuildBankSlotId()
-    for i = StartPoint, StartPoint + 500 do
-      local Link = GetItemLink(3, i)
-      if FCOISAllow(3, i) and DoesItemMatch(Link, ItemId, ItemLink) then
-        local count = select(2, GetItemInfo(3, i))
-        Total = Total + count
-        table.insert(Slot, {["BagId"] = 3, ["SlotId"] = i, ["Count"] = count})
+    if StartPoint then
+      for i = StartPoint, StartPoint + 500 do
+        local Link = GetItemLink(3, i)
+        if FCOISAllow(3, i) and DoesItemMatch(Link, ItemId, ItemLink) then
+          local count = select(2, GetItemInfo(3, i))
+          Total = Total + count
+          table.insert(Slot, {["BagId"] = 3, ["SlotId"] = i, ["Count"] = count})
+        end
       end
     end
   end
@@ -249,7 +253,7 @@ end
 --Find Craft Materials Slot
 function WG.FindItemType(CraftType)
   local Slot = {}
-  for i = 0, GetBagSize(1) do
+  for i = 0, GetBagSize(1) - 1 do
     local ItemLink = GetItemLink(1, i)
     local SkillType = GetItemLinkCraftingSkillType(ItemLink)
     local Fliter1, Fliter2 = GetItemLinkFilterTypeInfo(ItemLink)
@@ -307,10 +311,10 @@ local function NotFull(SlotId)
 end
 
 local function ShouldStack()
-  for a = 0, GetBagSize(1) do
+  for a = 0, GetBagSize(1) - 1 do
     local ItemLink = GetItemLink(1, a)
     if ItemLink ~= "" and NotFull(a) then
-      for b = a + 1, GetBagSize(1) do
+      for b = a + 1, GetBagSize(1) - 1 do
         if ItemLink == GetItemLink(1, b) and NotFull(b) then
           return true, ItemLink
         end
@@ -347,7 +351,7 @@ function WG.Stack(Fun)
   local UnDone, ItemLink = ShouldStack()
   if UnDone then
     local List = {}
-    for i = 0, GetBagSize(1) do
+    for i = 0, GetBagSize(1) - 1 do
       if ItemLink == GetItemLink(1, i) then
         local Now, Max = GetSlotStackSize(1, i)
         if Now < Max then
@@ -398,7 +402,6 @@ function WG.GuildBankCore(scene, _, newstate)
   --When Close
   if newstate == SCENE_HIDING then 
     WG.GuildBankEnd()
-    StackBag(BAG_BACKPACK)
   end
   
   --When Open

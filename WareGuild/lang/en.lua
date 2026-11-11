@@ -66,6 +66,9 @@ WG.Lang = {
   ["SETTING_IGNORE_INVENTORY"] = "[Withdraw for Daily Writs] Ignore Inventory",
   ["SETTING_IGNORE_INVENTORY_TOOLTIP"] = "When on, this step ignores materials already in your backpack, personal bank and crafting packages for crafting the required productions. (For example, a total of 42 materials are needed and 30 are already available. When enabled, it will attempt to take 42 materials out of the guild bank instead of 12)",
   
+  ["SETTING_LAZYCRAFTING"] = "Use LazyCrafting Queue",
+  ["SETTING_LAZYCRAFTING_TOOLTIP"] = "When on, [Withdraw for Daily Writs] also counts the raw materials (Blacksmith/Clothing/Woodworking) needed by the items queued in LazyCrafting (LibLazyCrafting, used by Lazy Writ Crafter and Lazy Set Crafter). When the same material is needed by both the writs and the queue, only the larger amount is withdrawn",
+
   ["SETTING_NE_TAKE"] = "When Not Enough, Withdraw the Remaining",
   ["SETTING_NE_TAKE_TOOLTIP"] = "When off, withdraw steps were skipped for lack of items",
   

@@ -66,6 +66,9 @@ WG.Lang = {
   ["SETTING_IGNORE_INVENTORY"] = "[取出日常生产物品] 步骤无视库存",
   ["SETTING_IGNORE_INVENTORY_TOOLTIP"] = "开启后，该步骤将无视背包、个人银行和制作包裹中，可用于制作产物的材料数量（例：共需要42锭生产，已有30锭。开启后将尝试从公会银行取出42锭而不是12锭）",
   
+  ["SETTING_LAZYCRAFTING"] = "使用 LazyCrafting 队列",
+  ["SETTING_LAZYCRAFTING_TOOLTIP"] = "开启后，[日常委托取出]步骤还会统计 LazyCrafting（LibLazyCrafting，Lazy Writ Crafter 与 Lazy Set Crafter 使用）队列中待制作物品（锻造/制衣/木工）所需的基础材料。当同一材料同时被委托和队列需要时，只取出较多的数量",
+
   ["SETTING_NE_TAKE"] = "物品不足时，取出所有剩余",
   ["SETTING_NE_TAKE_TOOLTIP"] = "关闭时，物品不足将跳过该取出步骤",
   

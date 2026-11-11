@@ -53,7 +53,7 @@ local function ItemList()
   local Link = {"/", }
   local Repeat = {}
   local Sort = {}
-  for i = 0, GetBagSize(1) do
+  for i = 0, GetBagSize(1) - 1 do
     local Tep = GetItemLink(1, i)
     if Tep ~= "" then
       if not Repeat[Tep] then
@@ -179,6 +179,14 @@ function WG.BuildMenu()
     tooltip = WG.Lang.SETTING_IGNORE_INVENTORY_TOOLTIP,
 		getFunc = function() return WG.SV.IgnoreInventory end,
 		setFunc = function(var) WG.SV.IgnoreInventory = var end,
+    width = "full",
+    },
+    { --Use LazyCrafting Queue
+		type = "checkbox",
+		name = WG.Lang.SETTING_LAZYCRAFTING,
+    tooltip = WG.Lang.SETTING_LAZYCRAFTING_TOOLTIP,
+		getFunc = function() return WG.SV.LazyCrafting end,
+		setFunc = function(var) WG.SV.LazyCrafting = var end,
     width = "full",
     },
     {

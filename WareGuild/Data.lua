@@ -280,6 +280,46 @@ local function MaterialCount(ItemId, NumTotal, Ignore)
   end
 end
 
+--LazyCrafting (LibLazyCrafting) Queue
+--Raw Materials (Steel/Textile/Wood) Needed for the Items to Craft
+function WG.FindLazyCraftingItem()
+  local Materials = {}
+  --Setting Off or LibLazyCrafting Missing
+  if not WG.SV.LazyCrafting then return Materials end
+  if not LibLazyCrafting or type(LibLazyCrafting.craftingQueue) ~= "table" then return Materials end
+  --Station: 1 BlackSmith(Steel) 2 Clothier(Textile) 6 Woodworking(Wood)
+  local StationList = {
+    [CRAFTING_TYPE_BLACKSMITHING] = true,
+    [CRAFTING_TYPE_CLOTHIER] = true,
+    [CRAFTING_TYPE_WOODWORKING] = true,
+  }
+  --Queue: [AddonName][Station][n] = Request
+  for _, Requests in pairs(LibLazyCrafting.craftingQueue) do
+    if type(Requests) == "table" then
+      for StationId, List in pairs(Requests) do
+        if StationList[StationId] and type(List) == "table" then
+          for i = 1, #List do
+            local Request = List[i]
+            if type(Request) == "table" and Request["type"] == "smithing"
+              and Request["pattern"] and Request["materialIndex"] then
+              --Material Link of this Pattern and Tier
+              local Link = GetSmithingPatternMaterialItemLink(Request["pattern"], Request["materialIndex"], 0)
+              if Link ~= "" then
+                local ItemId = GetItemLinkItemId(Link)
+                local Num = (Request["materialQuantity"] or 0) * (Request["smithingQuantity"] or 1)
+                if ItemId and ItemId ~= 0 and Num > 0 then
+                  Materials[ItemId] = (Materials[ItemId] or 0) + Num
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+  return Materials
+end
+
 --Find Missing Item for Daily Writs
 function WG.FindDailyItem()
   local Materials = {
@@ -308,8 +348,9 @@ function WG.FindDailyItem()
           end
           --Alchemy and Cook Production
           if Need > 0 and ((CraftType == 4 and MaterialId ~= 0) or CraftType == 5) then
+            --GetNextGuildBankSlotId Returns nil When the Bank is Empty
             local StartPoint = GetNextGuildBankSlotId()
-            if GetNextGuildBankSlotId then
+            if StartPoint then
               for i = StartPoint, StartPoint + 500 do
                 local ItemLink = GetItemLink(3, i)
                 if ItemLink ~= "" and DoesItemLinkFulfillJournalQuestCondition(ItemLink, a, 1, b, GetItemCreatorName(3, i) == GetUnitName("player")) then
@@ -348,6 +389,14 @@ function WG.FindDailyItem()
           table.insert(Materials, {["ItemId"] = Enchant2T, ["Count"] = Target})
         end
       end
+    end
+  end
+  --LazyCrafting Queue (Items to Craft: Steel/Textile/Wood)
+  --Take Max Per Item to Avoid Double Counting with the Writ Conditions
+  local LazyM = WG.FindLazyCraftingItem()
+  for ItemId, Count in pairs(LazyM) do
+    if not SmithM[ItemId] or SmithM[ItemId] < Count then
+      SmithM[ItemId] = Count
     end
   end
   --Raw Materials
