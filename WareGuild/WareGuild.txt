@@ -2,7 +2,7 @@
 ## APIVersion: 101051 101052
 ## Version: 0.28
 ## AddOnVersion: 20261112
-## Author: @MelanAster
+## Author: @Altorus13 DrNibble
 ## Description: Item Management Addon for Guild Banks.
 ## DependsOn: LibAddonMenu-2.0
 ## OptionalDependsOn: LibLazyCrafting FCOItemSaver
