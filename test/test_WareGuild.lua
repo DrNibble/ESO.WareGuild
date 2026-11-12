@@ -20,6 +20,12 @@ local GuildBank = nil
 local Stacks = {}
 -- smithing pattern -> material itemId
 local PatternMat = {[7] = 5413, [2] = 811, [3] = 803, [4] = 135138}
+-- Distinct links for the same itemId at different levels/styles/qualities
+local SlotLinks = {[1] = {}, [3] = {}}
+local LinkInfo = {}
+local ReferenceLevel, ReferenceCP = 1, 0
+local PatternUnavailable, ReferenceUnavailable = false, false
+local LastPatternArgs, LastResultArgs
 
 local function ToLink(id)
   return "|H1:item:" .. tostring(id) .. ":30:1:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0|h|h"
@@ -27,6 +33,7 @@ end
 
 GetBagSize = function(bag) if bag == 1 then return 12 end; return 0 end
 GetItemLink = function(bag, slot)
+  if SlotLinks[bag] and SlotLinks[bag][slot] then return SlotLinks[bag][slot] end
   if bag == 1 then return Bag[slot] and ToLink(Bag[slot]) or "" end
   if bag == 3 then
     if not GuildBank then return "" end
@@ -81,12 +88,26 @@ local ProductTrait = 0 -- ITEM_TRAIT_TYPE_NONE
 ITEM_QUALITY_NORMAL = 1
 ITEM_TRAIT_TYPE_NONE = 0
 GetSmithingPatternResultLink = function(pattern, matIndex, matQty, style, trait, linkStyle)
+  LastResultArgs = {pattern, matIndex, matQty, style, trait, linkStyle}
+  if pattern == 99 then
+    if ReferenceUnavailable then return "" end
+    local link = ToLink(43556) .. "reference"
+    LinkInfo[link] = {level = ReferenceLevel, cp = ReferenceCP}
+    return link
+  end
   local id = PatternProduct[pattern]
   if not id then return "" end
   return ToLink(id)
 end
-GetItemLinkQuality = function(link) return ProductQuality end
-GetItemLinkTraitInfo = function(link) return ProductTrait end
+GetSmithingPatternInfoForItemId = function(itemId, materialId, craftType)
+  LastPatternArgs = {itemId, materialId, craftType}
+  if PatternUnavailable then return nil, nil end
+  return 99, 2 -- Not the materialItemId from the quest!
+end
+GetItemLinkQuality = function(link) return (LinkInfo[link] or {}).quality or ProductQuality end
+GetItemLinkTraitInfo = function(link) return (LinkInfo[link] or {}).trait or ProductTrait end
+GetItemLinkRequiredLevel = function(link) return (LinkInfo[link] or {}).level or 1 end
+GetItemLinkRequiredChampionPoints = function(link) return (LinkInfo[link] or {}).cp or 0 end
 -- enchanting: glyph product of the three runes
 GetEnchantingResultingItemLink = function(pBag, pSlot, eBag, eSlot, aBag, aSlot, style)
   return ToLink(45070)
@@ -558,6 +579,77 @@ check("writ traited shield ignored: maple full", foundMat == 12)
 check("writ traited shield ignored: no product", foundProd == nil)
 ProductTrait = 0
 
+-- Exact craft level, including CP, must survive the final slot lookup.
+local function GearLink(tag, level, cp, quality, trait)
+  local link = ToLink(43556) .. tag
+  LinkInfo[link] = {level = level, cp = cp, quality = quality, trait = trait}
+  return link
+end
+local function DailyProduct()
+  local material, product
+  for _, entry in ipairs(WG.FindDailyItem()) do
+    if entry.ItemId == 803 then material = entry.Count end
+    if entry.ItemId == 43556 then product = entry end
+  end
+  return material, product
+end
+
+GuildBank = {[4] = 43556}
+SlotLinks[3] = {[4] = GearLink("level-four", 4, 0)}
+foundMat, foundProd = DailyProduct()
+check("writ wrong craft level: full materials", foundMat == 12 and foundProd == nil)
+check("pattern lookup uses quest material id and craft type",
+  LastPatternArgs[1] == 43556 and LastPatternArgs[2] == 147 and LastPatternArgs[3] == 6)
+check("reference uses material index, exact quantity, arbitrary style and no trait",
+  LastResultArgs[1] == 99 and LastResultArgs[2] == 2 and LastResultArgs[3] == 6
+  and LastResultArgs[4] == 1 and LastResultArgs[5] == 1 and LastResultArgs[6] == 0)
+
+GuildBank = {[4] = 43556, [5] = 43556}
+SlotLinks[3][5] = GearLink("other-style", 1, 0)
+foundMat, foundProd = DailyProduct()
+check("mixed bank levels: only correct level covers writ", foundMat == 6 and foundProd.Count == 1)
+check("craft level carried to withdrawal",
+  foundProd.CraftLevel == 1 and foundProd.CraftChampionPoints == 0)
+local selected = WG.FindItem(3, foundProd.ItemId, foundProd.ItemLink, foundProd)
+check("withdrawal ignores same itemId at wrong level", #selected == 1 and selected[1].SlotId == 5)
+check("ordinary itemId lookup remains unchanged", WG.FindItem(3, 43556)["Total"] == 2)
+
+Bag = {[0] = 43556}
+SlotLinks[1][0] = GearLink("bag-wrong-level", 4, 0)
+foundMat, foundProd = DailyProduct()
+check("wrong-level bag item not included in target", foundProd.Count == 1)
+SlotLinks[1][0] = GearLink("bag-right-level-other-style", 1, 0)
+foundMat, foundProd = DailyProduct()
+check("right-level bag item included regardless of style", foundProd.Count == 2)
+Bag = {}
+SlotLinks[1] = {}
+
+ReferenceLevel, ReferenceCP = 50, 150
+SlotLinks[3][4] = GearLink("cp160", 50, 160)
+SlotLinks[3][5] = GearLink("cp150", 50, 150)
+foundMat, foundProd = DailyProduct()
+check("CP150 writ rejects CP160 at same level", foundMat == 6 and foundProd.Count == 1)
+selected = WG.FindItem(3, foundProd.ItemId, foundProd.ItemLink, foundProd)
+check("CP filter reaches slot lookup", #selected == 1 and selected[1].SlotId == 5)
+SlotLinks[3][5] = GearLink("cp150-green", 50, 150, 2, 0)
+check("slot lookup keeps white filter", WG.FindItem(3, foundProd.ItemId, foundProd.ItemLink, foundProd).Total == 0)
+SlotLinks[3][5] = GearLink("cp150-trait", 50, 150, 1, 1)
+check("slot lookup keeps no-trait filter", WG.FindItem(3, foundProd.ItemId, foundProd.ItemLink, foundProd).Total == 0)
+
+PatternUnavailable = true
+foundMat, foundProd = DailyProduct()
+check("missing pattern falls back to materials", foundMat == 12 and foundProd == nil)
+PatternUnavailable = false
+ReferenceUnavailable = true
+foundMat, foundProd = DailyProduct()
+check("empty reference falls back to materials", foundMat == 12 and foundProd == nil)
+ReferenceUnavailable = false
+GuildBank = nil
+foundMat, foundProd = DailyProduct()
+check("empty bank falls back to materials", foundMat == 12 and foundProd == nil)
+ReferenceLevel, ReferenceCP = 1, 0
+SlotLinks[3] = {}
+
 -- 22f. Writ-driven enchanting: glyph in bank -> glyph taken, no runes
 FulfillItems[43556] = nil
 FulfillItems[45070] = true
@@ -576,6 +668,34 @@ check("writ glyph: glyph taken", foundGlyph == 1)
 check("writ glyph: no runes", foundRune == nil)
 FulfillItems[45070] = nil
 Journal[1] = nil
+
+-- Full daily-step -> TAKE_TO -> transfer path with mixed-level inventory.
+-- Exercise the delivered bank core, not just FindItem called directly.
+FulfillItems[43556] = true
+Journal[1] = {type = 4, conditions = {{43556, 147, 6, 1, 0, 1}}}
+GuildBank = {[4] = 43556, [5] = 43556}
+SlotLinks[3] = {
+  [4] = GearLink("integration-wrong", 4, 0),
+  [5] = GearLink("integration-right-other-style", 1, 0),
+}
+Bag = {[0] = 43556}
+SlotLinks[1] = {[0] = GearLink("integration-bag-wrong", 4, 0)}
+local realAllGuildStep = WG.AllGuildStep
+WG.AllGuildStep = function() return {{GuildId = 42, Type = WAREGUILD_DAILY}} end
+WG.CV = {}
+GetSetting = function() return "1" end
+SetSetting = function() end
+GetSelectedGuildBankId = function() return 42 end
+GetNumBagFreeSlots = function() return 10 end
+ClearCursor = function() end
+local Transfers = {}
+TransferFromGuildBank = function(slot) table.insert(Transfers, slot) end
+SCENE_SHOWN = "shown"
+WG.GuildBankCore({name = "guildBank"}, nil, SCENE_SHOWN)
+WG.GuildBankWork(false)
+check("daily step transfers only right-level bank slot", #Transfers == 1 and Transfers[1] == 5)
+check("wrong-level bag item does not suppress actual withdrawal", #Transfers == 1)
+WG.AllGuildStep = realAllGuildStep
 
 print(string.format("passed=%d failed=%d", passed, failed))
 if failed > 0 then os.exit(1) end

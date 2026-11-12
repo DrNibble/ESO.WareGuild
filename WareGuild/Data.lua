@@ -589,7 +589,7 @@ function WG.FindDailyItem()
   --Finished Products (Sword, Helmet, Staff, Shield, Glyph, Potion, Food...)
   --[ItemId] = {["ItemLink"], ["Count"] (Units Claimed From the Guild Bank)}
   local Products = {}
-  local function AddProduct(ItemId, ItemLink, Count)
+  local function AddProduct(ItemId, ItemLink, Count, CraftLevel, CraftChampionPoints)
     if not ItemId or ItemId == 0 or not Count or Count <= 0 then return end
     local Old = Products[ItemId]
     if Old then
@@ -597,7 +597,10 @@ function WG.FindDailyItem()
       --The Actual Take is Capped by the Guild Bank Availability
       Old["Count"] = Old["Count"] + Count
     else
-      Products[ItemId] = {["ItemLink"] = ItemLink, ["Count"] = Count}
+      Products[ItemId] = {
+        ["ItemLink"] = ItemLink, ["Count"] = Count,
+        ["CraftLevel"] = CraftLevel, ["CraftChampionPoints"] = CraftChampionPoints,
+      }
     end
   end
   --Check Quests
@@ -616,20 +619,34 @@ function WG.FindDailyItem()
           if Need > 0 and (CraftType == 1 or CraftType == 2 or CraftType == 6 or CraftType == 7) then
             --Finished Product (Shield, Sword, Staff, Helmet...) in the Guild Bank
             --Fulfilling the Writ: Take It Instead of the Raw Materials
-            --White, no Trait and no Enchantment Like a Fresh Craft
+            --White, no Trait, and the Exact Craft Level Required by the Writ
             local Have = 0
             if WG.SV.LazyCraftingProduct then
+              local Pattern, MaterialIndex = GetSmithingPatternInfoForItemId(ItemId, MaterialId, CraftType)
+              local ReferenceLink
+              if Pattern and MaterialIndex then
+                local _, NumPer = unpack(WG.MaterialExcel[CraftType][ItemId][MaterialId])
+                ReferenceLink = GetSmithingPatternResultLink(Pattern, MaterialIndex, NumPer, 1, 1, 0)
+              end
+              --No Reliable Reference: Keep the Raw Materials Rather Than Guess a Level
+              local CraftLevel, CraftChampionPoints
+              if ReferenceLink and ReferenceLink ~= "" then
+                CraftLevel = GetItemLinkRequiredLevel(ReferenceLink)
+                CraftChampionPoints = GetItemLinkRequiredChampionPoints(ReferenceLink)
+              end
               --GetNextGuildBankSlotId Returns nil When the Bank is Empty
               local StartPoint = GetNextGuildBankSlotId()
-              if StartPoint then
+              if StartPoint and CraftLevel ~= nil and CraftChampionPoints ~= nil then
                 for i = StartPoint, StartPoint + 500 do
                   local ItemLink = GetItemLink(3, i)
                   if ItemLink ~= "" and Have < Need
                     and GetItemLinkQuality(ItemLink) == ITEM_QUALITY_NORMAL
                     and GetItemLinkTraitInfo(ItemLink) == ITEM_TRAIT_TYPE_NONE
+                    and GetItemLinkRequiredLevel(ItemLink) == CraftLevel
+                    and GetItemLinkRequiredChampionPoints(ItemLink) == CraftChampionPoints
                     and DoesItemLinkFulfillJournalQuestCondition(ItemLink, a, 1, b, GetItemCreatorName(3, i) == GetUnitName("player")) then
                     local Count = select(2, GetItemInfo(3, i))
-                    AddProduct(GetItemLinkItemId(ItemLink), ItemLink, Count)
+                    AddProduct(GetItemLinkItemId(ItemLink), ItemLink, Count, CraftLevel, CraftChampionPoints)
                     Have = Have + Count
                   end
                 end
@@ -739,8 +756,11 @@ function WG.FindDailyItem()
   for ItemId, Product in pairs(Products) do
     --Target: Keep (Current Backbag + Claimed) in the Backbag
     --The Actual Take is Capped by the Guild Bank Availability
-    local Target = WG.FindItem(1, ItemId, Product["ItemLink"])["Total"] + Product["Count"]
-    table.insert(Materials, {["ItemLink"] = Product["ItemLink"], ["ItemId"] = ItemId, ["Count"] = Target})
+    local Target = WG.FindItem(1, ItemId, Product["ItemLink"], Product)["Total"] + Product["Count"]
+    table.insert(Materials, {
+      ["ItemLink"] = Product["ItemLink"], ["ItemId"] = ItemId, ["Count"] = Target,
+      ["CraftLevel"] = Product["CraftLevel"], ["CraftChampionPoints"] = Product["CraftChampionPoints"],
+    })
   end
   --End
   return Materials

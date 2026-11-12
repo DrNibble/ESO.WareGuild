@@ -1,5 +1,39 @@
 # CHANGES
 
+## 2026-11-12 - v0.28 (craft level des objets finis dans FindDailyItem)
+
+- **Niveau exact du writ** : pour la forge, la couture, le bois et la
+  joaillerie, `WG.FindDailyItem()` construit un lien de référence depuis
+  `GetSmithingPatternInfoForItemId(ItemId, MaterialId, CraftType)`, puis
+  `GetSmithingPatternResultLink` avec l'index de matériau retourné et la
+  quantité du tier dans `WG.MaterialExcel`. Le candidat doit avoir le même
+  `GetItemLinkRequiredLevel` et les mêmes
+  `GetItemLinkRequiredChampionPoints`, en plus des critères blanc, sans
+  trait et condition du journal satisfaite. Le style reste libre.
+- **Retrait cohérent** : `CraftLevel` et `CraftChampionPoints` accompagnent
+  l'objet jusqu'à l'étape de banque et au filtre optionnel de `WG.FindItem`.
+  Un autre exemplaire du même ItemId, mais du mauvais niveau, ne peut donc
+  ni gonfler le total du sac ni être sélectionné pour ce retrait. Les
+  règles ordinaires sans filtre gardent leur comportement.
+- **Repli prudent** : si le patron ou le lien de référence est indisponible,
+  les matériaux restent demandés ; aucun niveau n'est deviné.
+- **Périmètre** : ce correctif vise les équipements des conditions du journal.
+  Le parcours propre à la file LibLazyCrafting reste inchangé.
+
+### Vérification
+
+Signatures contrôlées dans `esoui/esoui`, branche `live`, révision
+`f819c808d57e237707c76e7b52518e2589c9e191` (API 101051, mise à jour
+12.1.7 du 9 novembre 2026) :
+[documentation des API](https://github.com/esoui/esoui/blob/f819c808d57e237707c76e7b52518e2589c9e191/ESOUIDocumentation.txt)
+et [résolution du patron depuis le journal](https://github.com/esoui/esoui/blob/f819c808d57e237707c76e7b52518e2589c9e191/esoui/ingame/crafting/craftadvisor_manager.lua#L261).
+
+Compilation des fichiers livrés en Lua 5.1 et harnais hors jeu :
+92 assertions, dont niveau incorrect, niveaux mélangés, CP150 contre CP160,
+style différent, sac au mauvais niveau, filtres blanc/sans trait au retrait,
+référence indisponible et parcours réel de l'étape journalière jusqu'au
+choix du slot transféré. Non testé dans ESO.
+
 ## 2026-11-11 - v0.27 (objets finis des writs journaliers sans file LazyCrafting)
 
 **Correction** : la récupération des objets finis en banque de guilde ne

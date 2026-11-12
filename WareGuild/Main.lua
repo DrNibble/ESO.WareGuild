@@ -3,7 +3,7 @@ local WG = SDC_WareGuild
 WG.name = "WareGuild"
 WG.title = "WareGuild"
 WG.author = "@MelanAster"
-WG.version = "0.27"
+WG.version = "0.28"
 
 --Default Setting
 WG.Default = {
@@ -205,15 +205,23 @@ local function DoesItemMatch(Link, ItemId, ItemLink)
 end
 
 --CORE: Find Item Slot
-function WG.FindItem(BagId, ItemId, ItemLink)
+function WG.FindItem(BagId, ItemId, ItemLink, ItemFilter)
   local Slot = {}
   local Total = 0
+  --Only Writ Equipment Carries This Filter; Ordinary Item Rules Stay Unchanged
+  local function MatchesCraftLevel(Link)
+    if not ItemFilter or ItemFilter.CraftLevel == nil then return true end
+    return GetItemLinkQuality(Link) == ITEM_QUALITY_NORMAL
+      and GetItemLinkTraitInfo(Link) == ITEM_TRAIT_TYPE_NONE
+      and GetItemLinkRequiredLevel(Link) == ItemFilter.CraftLevel
+      and GetItemLinkRequiredChampionPoints(Link) == ItemFilter.CraftChampionPoints
+  end
   
   --BackBag
   if BagId == 1 then
     for i = 0, GetBagSize(1) - 1 do
       local Link = GetItemLink(1, i)
-      if not IsItemLinkStolen(Link) and FCOISAllow(1, i) and DoesItemMatch(Link, ItemId, ItemLink) then
+      if not IsItemLinkStolen(Link) and FCOISAllow(1, i) and DoesItemMatch(Link, ItemId, ItemLink) and MatchesCraftLevel(Link) then
         local count = select(2, GetItemInfo(1, i))
         Total = Total + count
         table.insert(Slot, {["BagId"] = 1, ["SlotId"] = i, ["Count"] = count})
@@ -227,7 +235,7 @@ function WG.FindItem(BagId, ItemId, ItemLink)
     if StartPoint then
       for i = StartPoint, StartPoint + 500 do
         local Link = GetItemLink(3, i)
-        if FCOISAllow(3, i) and DoesItemMatch(Link, ItemId, ItemLink) then
+        if FCOISAllow(3, i) and DoesItemMatch(Link, ItemId, ItemLink) and MatchesCraftLevel(Link) then
           local count = select(2, GetItemInfo(3, i))
           Total = Total + count
           table.insert(Slot, {["BagId"] = 3, ["SlotId"] = i, ["Count"] = count})
@@ -504,7 +512,7 @@ function WG.GuildBankWork(DoRemove)
   
   --ItemTake
   if bank.Type > 10 and bank.Type < 20 then
-    local Slot = WG.FindItem(3, bank.ItemId, bank.ItemLink)
+    local Slot = WG.FindItem(3, bank.ItemId, bank.ItemLink, bank)
     --TakeAll
     if bank.Type == WAREGUILD_TAKE_ALL then
       for i = 1, #Slot do
@@ -517,7 +525,7 @@ function WG.GuildBankWork(DoRemove)
     end
     --TakeTo
     if bank.Type == WAREGUILD_TAKE_TO then
-      local BagSlot = WG.FindItem(1, bank.ItemId, bank.ItemLink)
+      local BagSlot = WG.FindItem(1, bank.ItemId, bank.ItemLink, bank)
       local ToTake = bank.Count - BagSlot["Total"]
       --Need to take
       if ToTake > 0 then
@@ -555,6 +563,8 @@ function WG.GuildBankWork(DoRemove)
               ["Type"] = WAREGUILD_STORE_TO,
               ["ItemId"] = bank.ItemId,
               ["ItemLink"] = bank.ItemLink,
+              ["CraftLevel"] = bank.CraftLevel,
+              ["CraftChampionPoints"] = bank.CraftChampionPoints,
               ["Count"] = Slot["Total"] + BagSlot["Total"] - bank.Count,
             })
       end
@@ -563,7 +573,7 @@ function WG.GuildBankWork(DoRemove)
   
   --ItemStore
   if bank.Type > 20 and bank.Type < 30 then
-    local Slot = WG.FindItem(1, bank.ItemId, bank.ItemLink)
+    local Slot = WG.FindItem(1, bank.ItemId, bank.ItemLink, bank)
     --StoreAll
     if bank.Type == WAREGUILD_STORE_ALL then
       for i = 1, #Slot do
@@ -575,7 +585,7 @@ function WG.GuildBankWork(DoRemove)
       end
     end
     if bank.Type == WAREGUILD_STORE_TO then
-      local BankSlot = WG.FindItem(3, bank.ItemId, bank.ItemLink)
+      local BankSlot = WG.FindItem(3, bank.ItemId, bank.ItemLink, bank)
       local ToStore = bank.Count - BankSlot["Total"]
       --Need to Store
       if ToStore > 0 then
@@ -634,6 +644,8 @@ function WG.GuildBankWork(DoRemove)
         ["Type"] = WAREGUILD_TAKE_TO,
         ["ItemLink"] = Materials[i]["ItemLink"],
         ["ItemId"] = Materials[i]["ItemId"],
+        ["CraftLevel"] = Materials[i]["CraftLevel"],
+        ["CraftChampionPoints"] = Materials[i]["CraftChampionPoints"],
         ["Count"] = Materials[i]["Count"],
       }
       table.insert(Step, 2, Tep)
