@@ -153,7 +153,10 @@ CallSecureProtected = function(Name, SourceBag, SourceSlot, DestBag, DestSlot, C
   assert(Source, "move from empty slot")
   local Amount = Count == -1 and math.min(Source.count, Source.max - Dest.count) or Count
   assert(Amount > 0 and Amount <= Source.count)
-  assert(not Dest or (link(Source) == link(Dest) and Dest.count + Amount <= Dest.max))
+  --The game merges stacks by item data: the same ItemId stacks together
+  --whatever the link variant (degraded guild-bank links).
+  assert(not Dest or (GetItemLinkItemId(link(Source)) == GetItemLinkItemId(link(Dest))
+    and Dest.count + Amount <= Dest.max))
   Operations[#Operations + 1] = {"move", SourceSlot, DestSlot, Amount}
   later(function()
     if not Bag[DestSlot] then Bag[DestSlot] = item(Source.id, 0, Source.max, Source.variant, Source.level) end
@@ -329,18 +332,22 @@ check("protected backpack stack not merged", total(1, 30157) == 7 and total(3, 3
 
 reset(); example(); Bank[6] = item(30157, 11, 200, 2)
 run(storeAll())
-check("same itemId with different link not borrowed", Bank[6] and Bank[6].variant == 2 and Bank[6].count == 11)
-check("distinct variants remain separate", total(3, 30157) == 41 and select(2, total(3, 30157)) == 2)
+check("stackable: same itemId with a different link variant is regrouped",
+  total(3, 30157) == 41 and select(2, total(3, 30157)) == 1)
+check("stackable: variant bank stack borrowed for regroup", numOps("take") == 3)
 
 reset(); example(); Bank[6] = item(30157, 11, 200, 1, 2)
 run(storeAll())
-check("legacy internal-level match does not merge different levels", Bank[6] and Bank[6].level == 2)
-check("different required level is not borrowed", numOps("take") == 2)
+check("stackable: bank stack with another link level is regrouped",
+  total(3, 30157) == 41 and select(2, total(3, 30157)) == 1 and numOps("take") == 3)
 
 reset(); Bag[0] = item(30157, 25); Bank[4] = item(30157, 2, 200, 1, 2)
 run({{GuildId = 42, Type = WAREGUILD_TAKE_TO, ItemId = 30157, Count = 5}})
-check("rejected bank stack of other level is reported", hasMessage("different level, quality or link") and hasMessage("lvl 2"))
-check("rejected bank stack: normal deposit completes", total(1, 30157) == 5 and total(3, 30157) == 22 and numOps("take") == 0)
+check("stackable: degraded-link take-to keeps 5 in the bag", total(1, 30157) == 5)
+check("stackable: degraded-link take-to ends with one bank stack of 22",
+  total(3, 30157) == 22 and select(2, total(3, 30157)) == 1)
+check("stackable: no mismatch message for a stackable item",
+  not hasMessage("different level, quality or link"))
 
 reset(); example()
 run({{GuildId = 42, Type = WAREGUILD_TAKE_TO, ItemId = 30157, Count = 5}})
@@ -987,6 +994,28 @@ Bag = {}
 RefreshButtons[1].func()
 check("empty backpack produces only the placeholder", #WG_Guild_1_Item.data.choices == 1 and WG_Guild_1_Item.data.choices[1] == "/")
 zo_strformat = OriginalFormat
+
+--Guild-bank link bug beyond level 0/1: the same rune's bank link reports a
+--different internal level (50 here) and an unparsable quality/CP. Runes and
+--other stackable items have no level notion: the same ItemId is the same
+--item and every bank stack must be borrowed and regrouped.
+reset()
+Bag[0] = item(45856, 12)
+Bank[4], Bank[5] = item(45856, 3), item(45856, 5)
+local RealGetItemLink2 = GetItemLink
+GetItemLink = function(BagId, Slot)
+  local Text = RealGetItemLink2(BagId, Slot)
+  if BagId == 3 and Text ~= "" then
+    return (Text:gsub("^(|H1:item:%d+:%d+):%d+:", "%1:50:"))
+  end
+  return Text
+end
+run({{GuildId = 42, Type = WAREGUILD_TAKE_TO, ItemId = 45856, Count = 10}})
+GetItemLink = RealGetItemLink2
+check("rune link bug: 10 stay in the backpack", total(1, 45856) == 10)
+check("rune link bug: one bank stack of 10", total(3, 45856) == 10 and select(2, total(3, 45856)) == 1)
+check("rune link bug: both bank stacks borrowed", numOps("take") == 2)
+check("rune link bug: no mismatch message", not hasMessage("different level, quality or link"))
 
 --Guild-bank link bug: the bank reports internal level 0/1 in its item links
 --while the backpack reports the real level. A TAKE_TO rule keeping 10 with 12

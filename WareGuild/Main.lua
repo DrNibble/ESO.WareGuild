@@ -599,28 +599,33 @@ local function DepositOperation(Target, BankEvent, BankSlot, Ready, Action, Cont
 end
 
 local function DepositSlots(Target, BagId)
-  --No ItemId Fuzzy Match: Different Qualities/Levels Must Never Be Merged.
-  local Candidates = WG.FindItem(BagId, nil, Target.ItemLink)
+  --Gear (non-stackable) keeps the strict identity check: the same ItemId
+  --exists at several craft levels and must never be merged. Stackable items
+  --(materials, runes, gems, food...) have no level notion: the same ItemId
+  --is the same item. Guild-bank links are degraded (wrong internal level
+  --field, unparsable quality and CP), so a bank stack of a stackable item
+  --is matched by ItemId, not by link variant.
+  local Id = GetItemLinkItemId(Target.ItemLink)
+  --Match by ItemId in both bags: a stack borrowed from the bank keeps its
+  --degraded link in the backpack and must still stack with the target.
+  local Candidates = WG.FindItem(BagId, Id, Target.ItemLink)
   local Slots = {Total = 0}
   for _, Slot in ipairs(Candidates) do
     local Link = GetItemLink(BagId, Slot.SlotId)
-    --FindItem's Legacy Internal-Level Workaround Is Broader Than Stacking.
-    --Guild-bank stackable stacks: a bank link reporting internal level 0/1
-    --with another level in the backpack is the known guild-bank link bug, not
-    --another craft level: the same ItemId stack is the same item and must be
-    --regrouped. Genuinely different levels (a real level gap, or non-stackable
-    --gear whose ItemId exists at several tiers) still never merge.
     local _, Max = GetSlotStackSize(BagId, Slot.SlotId)
-    local Level = GetItemLinkRequiredLevel(Link)
-    local BankLinkBug = BagId == 3 and Max > 1
-      and (Level == 0 or Level == 1)
-      and Level ~= GetItemLinkRequiredLevel(Target.ItemLink)
-    if (not Target.KnowledgeRule or KnowledgeSlotAllowed(BagId, Slot.SlotId))
-      and GetItemLinkQuality(Link) == GetItemLinkQuality(Target.ItemLink)
-      and GetItemLinkTraitInfo(Link) == GetItemLinkTraitInfo(Target.ItemLink)
-      and (BankLinkBug
-        or (Level == GetItemLinkRequiredLevel(Target.ItemLink)
-          and GetItemLinkRequiredChampionPoints(Link) == GetItemLinkRequiredChampionPoints(Target.ItemLink))) then
+    local Allowed = not Target.KnowledgeRule or KnowledgeSlotAllowed(BagId, Slot.SlotId)
+    if Max > 1 then
+      --Stackable: same ItemId is the same item whatever the link variant.
+      Allowed = Allowed and GetItemLinkItemId(Link) == Id
+    else
+      --Non-stackable gear: exact identity (quality, trait, level, CP).
+      Allowed = Allowed
+        and GetItemLinkQuality(Link) == GetItemLinkQuality(Target.ItemLink)
+        and GetItemLinkTraitInfo(Link) == GetItemLinkTraitInfo(Target.ItemLink)
+        and GetItemLinkRequiredLevel(Link) == GetItemLinkRequiredLevel(Target.ItemLink)
+        and GetItemLinkRequiredChampionPoints(Link) == GetItemLinkRequiredChampionPoints(Target.ItemLink)
+    end
+    if Allowed then
       table.insert(Slots, Slot)
       Slots.Total = Slots.Total + Slot.Count
     end

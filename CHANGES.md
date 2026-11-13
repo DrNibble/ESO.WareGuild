@@ -1,5 +1,26 @@
 # CHANGES
 
+## 2026-11-13 - v0.39 (runes : liens de banque dégradés au-delà du niveau 0/1)
+
+**Problème** : en v0.38, le regroupement des piles existantes était limité aux
+liens de banque dégradés aux niveaux internes 0 ou 1. Le test en jeu a montré
+que la dégradation va plus loin : pour les runes (Denata, Jode, Porade...),
+le lien de la banque affiche un niveau interne de 50 et une qualité / PC
+illisible, alors qu'il s'agit de la même rune que celle du sac. Le contrôle
+strict (niveau/qualité/PC) rejetait donc ces piles : message de
+non-correspondance et runes jamais regroupées.
+
+**Correctif** : les objets empilables (matériaux, runes, gemmes, nourriture...)
+n'ont pas de notion de niveau — même ItemId = même objet. Les piles de ces
+objets sont désormais apparoyées par ItemId, côté banque comme côté sac (une
+pile empruntée garde son lien dégradé dans le sac et doit quand même
+s'empiler). Les équipements non empilables (armures, armes, joaillerie,
+glyphes) conservent le contrôle strict d'identité (qualité, trait, niveau,
+PC), car un même ItemId existe à plusieurs niveaux d'artisanat.
+
+**Non testé dans ESO.** Tests : 307 + 98 passés (dont un cas rune reproduisant
+la dégradation observée : niveau interne 50 en banque).
+
 ## 2026-11-13 - v0.38 (regroupement des piles existantes de la banque de guilde)
 
 **Problème** : en v0.37, quand une règle « garder N dans le sac » détectait un
