@@ -9,7 +9,7 @@ end
 local Bag, Bank, Handlers, Tasks, Timers, Messages, Operations
 local Size, BankSize, Permission, SelectedGuild, BankFirst, FailTransfer
 local LockedBag, LockedBank, LostSpace, Settings, OnWithdrawal
-local EndCount, GuardWaits
+local EndCount, GuardWaits, FulfillVariant
 local Bound, PlayerLocked, StolenItems, Knowledge, ResearchItems, ResearchKnowledge, HasWrit
 local KnowledgeCalls, LastKnowledgeArgs, LastResearchArgs
 local function item(Id, Count, Max, Variant, Level)
@@ -454,7 +454,9 @@ end
 GetItemCreatorName, GetUnitName = function() return "tester" end, function() return "tester" end
 GetItemLinkStacks = function(Link) return total(1, GetItemLinkItemId(Link)), 0, 0 end
 DoesItemLinkFulfillJournalQuestCondition = function(Link)
-  return QuestMatches and GetItemLinkItemId(Link) == WantedId
+  -- FulfillVariant: only items of that variant belong to the writ material tier
+  local Variant = tonumber(Link:match("item:%d+:%d+:%d+:(%d+)"))
+  return QuestMatches and GetItemLinkItemId(Link) == WantedId and (FulfillVariant == nil or Variant == FulfillVariant)
 end
 GetItemLinkQuality = function(Link)
   return GetItemLinkItemId(Link) == WantedId and WantQuality or 1
@@ -469,6 +471,7 @@ SelectGuildBank = function(Id)
 end
 local function dailySetup()
   reset()
+  FulfillVariant = nil
   WantedId, WantQuality, WantTrait, QuestMatches, NoPattern, NoReference = 43559, 1, 0, true, false, false
   SelectedGuild, Selections = 44, {}
   WG.SV.LazyCraftingProduct, WG.SV.LazyCrafting = true, false
@@ -600,6 +603,27 @@ check("absent finished staff reports which bank was searched", hasMessage("no ma
 dailySetup(); WG.SV.LazyCraftingProduct = false; run(dailySteps())
 check("disabled finished-product setting is explained", hasMessage("finished-item retrieval disabled") and numOps("take") == 0)
 
+-- Same itemId in another material tier (maple vs ruby ash): only the tier accepted by the
+-- journal condition may be withdrawn, even without a reference craft level.
+local function tierSetup(WithBag)
+  dailySetup(); NoReference = true; FulfillVariant = 3
+  Bank[2455] = item(43559, 1, 1, 2, 16)   -- maple: same id, smaller stack, rejected by the journal
+  Bank[2456] = item(43559, 2, 5, 3, 16)   -- ruby ash: accepted by the journal
+  if WithBag then Bag[0] = item(43559, 1, 1, 2, 16) end
+end
+local function bagVariants()
+  local Seen = {}
+  for _, Item in pairs(Bag) do if Item.id == 43559 then Seen[Item.variant] = (Seen[Item.variant] or 0) + Item.count end end
+  return Seen[2] or 0, Seen[3] or 0
+end
+tierSetup(); run(dailySteps())
+local Maple, RubyAsh = bagVariants()
+check("no reference: only the journal-accepted tier is withdrawn", Maple == 0 and RubyAsh >= 1 and total(3, 43559) >= 1)
+check("no reference: the rejected tier stays in the bank", Bank[2455] ~= nil and Bank[2455].variant == 2)
+tierSetup(true); run(dailySteps())
+Maple, RubyAsh = bagVariants()
+check("no reference: a rejected-tier item in the backpack does not count as stock",
+  RubyAsh >= 1 and Bank[2455] ~= nil)
 dailySetup(); FailTransfer = true; run(dailySteps())
 check("native transfer error includes returned error code", hasMessage("transfer error denied") and hasMessage("guild bank error denied"))
 check("failed transfer leaves staff in bank and restores settings", total(3, 43559) == 1 and total(1, 43559) == 0 and Settings == "1")

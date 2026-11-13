@@ -684,18 +684,24 @@ function WG.FindDailyItem()
   --Finished Products (Sword, Helmet, Staff, Shield, Glyph, Potion, Food...)
   --[ItemId] = {["ItemLink"], ["Count"] (Units Claimed From the Guild Bank)}
   local Products = {}
-  local function AddProduct(ItemId, ItemLink, Count, CraftLevel, CraftChampionPoints, WritProduct)
+  local function AddProduct(ItemId, ItemLink, Count, CraftLevel, CraftChampionPoints, WritProduct, Condition)
     if not ItemId or ItemId == 0 or not Count or Count <= 0 then return end
     local Old = Products[ItemId]
     if Old then
       --Several Sources (Writ Conditions and LazyCrafting) May Claim the Same Product
       --The Actual Take is Capped by the Guild Bank Availability
       Old["Count"] = Old["Count"] + Count
+      if WritProduct then Old["WritProduct"] = true end
+      if Condition then
+        Old["Conditions"] = Old["Conditions"] or {}
+        table.insert(Old["Conditions"], Condition)
+      end
     else
       Products[ItemId] = {
         ["ItemLink"] = ItemLink, ["Count"] = Count,
         ["CraftLevel"] = CraftLevel, ["CraftChampionPoints"] = CraftChampionPoints,
         ["WritProduct"] = WritProduct,
+        ["Conditions"] = Condition and {Condition} or nil,
       }
     end
   end
@@ -752,7 +758,7 @@ function WG.FindDailyItem()
                     if Reason then WG.ReportWithdrawalBlocked(ItemLink, Reason)
                     else
                       local Count = select(2, GetItemInfo(3, i))
-                      AddProduct(GetItemLinkItemId(ItemLink), ItemLink, Count, CraftLevel, CraftChampionPoints, true)
+                      AddProduct(GetItemLinkItemId(ItemLink), ItemLink, Count, CraftLevel, CraftChampionPoints, true, {a, b})
                       Have = Have + Count
                     end
                   end
@@ -878,7 +884,7 @@ function WG.FindDailyItem()
     table.insert(Materials, {
       ["ItemLink"] = Product["ItemLink"], ["ItemId"] = ItemId, ["Count"] = Target,
       ["CraftLevel"] = Product["CraftLevel"], ["CraftChampionPoints"] = Product["CraftChampionPoints"],
-      ["WritProduct"] = Product["WritProduct"],
+      ["WritProduct"] = Product["WritProduct"], ["Conditions"] = Product["Conditions"],
     })
   end
   --End

@@ -3,7 +3,7 @@ local WG = SDC_WareGuild
 WG.name = "WareGuild"
 WG.title = "WareGuild"
 WG.author = "@MelanAster"
-WG.version = "0.33"
+WG.version = "0.34"
 
 --Default Setting
 WG.Default = {
@@ -207,15 +207,27 @@ function WG.WithdrawalBlockReason(SlotId, IgnorePermission)
   end
 end
 
-function WG.WritItemBlockReason(Link, Level, CP)
+--The Journal Condition Is the Only Check of the Material Tier Available Outside a Crafting
+--Station: Same-ItemId Items of Another Tier (Maple Shield vs Ruby Ash Shield) Must Not Pass
+function WG.FulfillsWritConditions(Filter, Link, BagId, SlotId)
+  if not Filter or not Filter.Conditions then return true end
+  local Own = GetItemCreatorName(BagId, SlotId) == GetUnitName("player")
+  for _, Condition in ipairs(Filter.Conditions) do
+    if DoesItemLinkFulfillJournalQuestCondition(Link, Condition[1], 1, Condition[2], Own) then return true end
+  end
+  return false
+end
+
+function WG.WritItemBlockReason(Link, Level, CP, Filter, BagId, SlotId)
   if GetItemLinkQuality(Link) ~= ITEM_QUALITY_NORMAL then return WG.Lang.CHAT_WITHDRAW_QUALITY end
   if GetItemLinkTraitInfo(Link) ~= ITEM_TRAIT_TYPE_NONE then return WG.Lang.CHAT_WITHDRAW_TRAIT end
   --Level Unknown (No Reference Link Outside a Crafting Station): the Journal Condition Checks the Tier
-  if Level == nil or CP == nil then return end
-  if GetItemLinkRequiredLevel(Link) ~= Level or GetItemLinkRequiredChampionPoints(Link) ~= CP then
+  if Level ~= nil and CP ~= nil
+    and (GetItemLinkRequiredLevel(Link) ~= Level or GetItemLinkRequiredChampionPoints(Link) ~= CP) then
     return zo_strformat(WG.Lang.CHAT_WITHDRAW_LEVEL, Level, CP,
       GetItemLinkRequiredLevel(Link), GetItemLinkRequiredChampionPoints(Link))
   end
+  if not WG.FulfillsWritConditions(Filter, Link, BagId, SlotId) then return WG.Lang.CHAT_WITHDRAW_CONDITION end
 end
 
 --Guild Bank Slots Are Sparse IDs, Not a Contiguous Range of 500 Slots.
@@ -250,8 +262,9 @@ function WG.FindItem(BagId, ItemId, ItemLink, ItemFilter)
   local Total = 0
   --Only Writ Equipment Carries This Filter; Ordinary Item Rules Stay Unchanged
   local IsWritFilter = ItemFilter and (ItemFilter.WritProduct or ItemFilter.CraftLevel ~= nil)
-  local function MatchesCraftLevel(Link)
+  local function MatchesCraftLevel(Link, SlotBag, SlotId)
     if not IsWritFilter then return true end
+    if not WG.FulfillsWritConditions(ItemFilter, Link, SlotBag, SlotId) then return false end
     return GetItemLinkQuality(Link) == ITEM_QUALITY_NORMAL
       and GetItemLinkTraitInfo(Link) == ITEM_TRAIT_TYPE_NONE
       and (ItemFilter.CraftLevel == nil or (
@@ -263,7 +276,7 @@ function WG.FindItem(BagId, ItemId, ItemLink, ItemFilter)
   if BagId == 1 then
     for i = 0, GetBagSize(1) - 1 do
       local Link = GetItemLink(1, i)
-      if not IsItemLinkStolen(Link) and FCOISAllow(1, i) and DoesItemMatch(Link, ItemId, ItemLink) and MatchesCraftLevel(Link) then
+      if not IsItemLinkStolen(Link) and FCOISAllow(1, i) and DoesItemMatch(Link, ItemId, ItemLink) and MatchesCraftLevel(Link, 1, i) then
         local count = select(2, GetItemInfo(1, i))
         Total = Total + count
         table.insert(Slot, {["BagId"] = 1, ["SlotId"] = i, ["Count"] = count})
@@ -278,7 +291,7 @@ function WG.FindItem(BagId, ItemId, ItemLink, ItemFilter)
         --Inventory Totals Also Serve Deposit Rules: Count Stock Even Without Take Permission.
         local Reason = WG.WithdrawalBlockReason(i, true)
         if not Reason and IsWritFilter then
-          Reason = WG.WritItemBlockReason(Link, ItemFilter.CraftLevel, ItemFilter.CraftChampionPoints)
+          Reason = WG.WritItemBlockReason(Link, ItemFilter.CraftLevel, ItemFilter.CraftChampionPoints, ItemFilter, 3, i)
         end
         if Reason then
           WG.ReportWithdrawalBlocked(Link, Reason)
@@ -956,6 +969,7 @@ function WG.GuildBankWork(DoRemove)
               ["CraftLevel"] = bank.CraftLevel,
               ["CraftChampionPoints"] = bank.CraftChampionPoints,
               ["WritProduct"] = bank.WritProduct,
+              ["Conditions"] = bank.Conditions,
               ["Count"] = Slot["Total"] + BagSlot["Total"] - bank.Count,
             })
       end
@@ -1038,6 +1052,7 @@ function WG.GuildBankWork(DoRemove)
         ["CraftLevel"] = Materials[i]["CraftLevel"],
         ["CraftChampionPoints"] = Materials[i]["CraftChampionPoints"],
         ["WritProduct"] = Materials[i]["WritProduct"],
+        ["Conditions"] = Materials[i]["Conditions"],
         ["Count"] = Materials[i]["Count"],
       }
       table.insert(Step, 2, Tep)

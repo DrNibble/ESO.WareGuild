@@ -1,5 +1,27 @@
 # CHANGES
 
+## 2026-11-13 - v0.34 (palier du matériau respecté au retrait, sans établi)
+
+**Problème** : en v0.33, la recherche trouvait bien le bouclier et le bâton en
+frêne roux (la condition du journal refusait ceux en érable), mais l'étape de
+retrait ne gardait que l'`ItemId`, qui est identique à tous les paliers. Elle
+pouvait donc retirer l'exemplaire en érable (plus petite pile) et compter un
+érable du sac comme stock.
+
+- **Condition du journal portée jusqu'au retrait** : chaque objet fini de writ
+  garde les conditions (`quête`, `condition`) qui l'ont demandé. `WG.FindItem`
+  (banque et sac) n'accepte plus qu'un exemplaire que
+  `DoesItemLinkFulfillJournalQuestCondition` valide pour l'une de ces
+  conditions, en plus de la qualité blanche et de l'absence de trait. Cela
+  s'applique aux étapes « garder » et « remettre en banque ».
+- **Niveau exact** : toujours comparé quand le lien de référence existe
+  (établi) ; sinon le palier est validé par la condition du journal.
+- **Tests** : un test reproduit le cas (érable et frêne roux de même `ItemId`,
+  l'érable dans la plus petite pile ou dans le sac) ; il échoue avec la v0.33
+  et passe avec la v0.34.
+
+**Non testé dans ESO** : validation hors jeu uniquement.
+
 ## 2026-11-13 - v0.33 (objets finis des commandes journalières sans établi)
 
 **Problème** : à la banque de guilde, le chat affichait pour chaque guilde
