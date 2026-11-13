@@ -1,5 +1,15 @@
 # CHANGES
 
+## 2026-11-13 - v0.35 (diagnostic des objets finis manquants)
+
+- **Ligne de suivi par objet fini de commande journalière** : avant chaque
+  retrait, le chat indique pour l'objet le nombre déjà dans le sac, le nombre à
+  retirer et le nombre disponible dans la banque de guilde de l'étape
+  (par exemple « dans le sac : 0 ; à retirer : 1 ; disponible dans cette
+  banque : 1 »). Elle permet de savoir si un objet manquant n'est pas trouvé,
+  est déjà compté dans le sac, ou est retiré sans être accepté par la quête.
+  Dédupliquée comme les autres messages. Aucun changement de règle de retrait.
+
 ## 2026-11-13 - v0.34 (palier du matériau respecté au retrait, sans établi)
 
 **Problème** : en v0.33, la recherche trouvait bien le bouclier et le bâton en
