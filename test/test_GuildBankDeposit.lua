@@ -634,5 +634,72 @@ local SavedSteps = WG.AllGuildStep()
 check("saved knowledge rule survives ordinary rule flattening", #SavedSteps == 1
   and SavedSteps[1].Type == WAREGUILD_STORE_UNKNOWN and SavedSteps[1].GuildId == 44)
 
-print(string.format("deposit and knowledge passed=%d failed=%d", Passed, Failed))
+--Exercise the real dropdown choices, selections and refresh callbacks.
+reset()
+WG.SV.Guild = {}
+for Index = 1, 5 do WG.SV.Guild[Index] = 41 + Index; WG.SV["Guild" .. Index] = {} end
+local MenuInfo = {
+  [99999] = {0, "Zzz"}, [900] = {1, "ALPHA^ns"}, [901] = {1, "alpha^ms"},
+  [10] = {1, "zinc"}, [1] = {2, "Abricot"}, [2] = {2, "beta"},
+  [3] = {3, "gamma"}, [4] = {4, "ambre"}, [5] = {5, "Citron"},
+}
+GetItemLinkDisplayQuality = function(Link) return MenuInfo[GetItemLinkItemId(Link)][1] end
+GetItemLinkName = function(Link) return MenuInfo[GetItemLinkItemId(Link)][2] end
+LocaleAwareToLower = string.lower
+SI_TOOLTIP_ITEM_NAME = "item-name-format"
+local OriginalFormat = zo_strformat
+zo_strformat = function(Format, ...)
+  if Format == SI_TOOLTIP_ITEM_NAME then return ((...):gsub("%^.*", "")) end
+  return OriginalFormat(Format, ...)
+end
+local Ordered = {
+  item(99999, 1), item(900, 1), item(900, 1, 200, 2), item(901, 1),
+  item(10, 1), item(1, 1), item(2, 1), item(3, 1), item(4, 1), item(5, 1),
+}
+for Index, Item in ipairs(Ordered) do Bag[12 - Index] = Item end
+Bag[0] = item(900, 8) --Duplicate link, different stack count; slot 1 is empty.
+WG.BuildMenu()
+local Dropdowns, RefreshButtons, StoreButtons = {}, {}, {}
+for _, Option in ipairs(Options) do
+  if Option.controls then
+    for _, Control in ipairs(Option.controls) do
+      if Control.name == WG.Lang.GUILD_ITEM_SCROLL then table.insert(Dropdowns, Control) end
+      if Control.name == WG.Lang.GUILD_UPDATE_ITEM_LIST then table.insert(RefreshButtons, Control) end
+      if Control.name == WG.Lang.GUILD_STORE_ALL then table.insert(StoreButtons, Control) end
+    end
+  end
+end
+check("item dropdown exists in all five guild menus", #Dropdowns == 5 and #RefreshButtons == 5 and #StoreButtons == 5)
+for Index, Dropdown in ipairs(Dropdowns) do
+  local Choices = Dropdown.choices
+  check("guild " .. Index .. ": placeholder remains first", Choices[1] == "/")
+  check("guild " .. Index .. ": empty slots and duplicate links excluded", #Choices == #Ordered + 1)
+  local Correct = true
+  for Position, Item in ipairs(Ordered) do
+    if Choices[Position + 1] ~= link(Item) then Correct = false end
+  end
+  check("guild " .. Index .. ": ascending quality, case-insensitive name and deterministic tie", Correct)
+  check("guild " .. Index .. ": no LAM sort overrides the precomputed order", Dropdown.sort == nil and Dropdown.choicesValues == nil)
+  Dropdown.setFunc(Choices[4])
+  check("guild " .. Index .. ": selected value remains the original item link", Dropdown.getFunc() == link(Ordered[3]))
+  StoreButtons[Index].func()
+  check("guild " .. Index .. ": new rule targets exactly the selected variant",
+    WG.SV["Guild" .. Index][1].ItemLink == link(Ordered[3]))
+  local Updates = 0
+  local Control = {data = {}}
+  Control.UpdateChoices = function() Updates = Updates + 1 end
+  _G["WG_Guild_" .. Index .. "_Item"] = Control
+  MenuInfo[5] = {0, "Aaa"}
+  RefreshButtons[Index].func()
+  check("guild " .. Index .. ": refresh recomputes quality and name order",
+    Control.data.choices[2] == link(Ordered[10]) and Control.data.choices[3] == link(Ordered[1]) and Updates == 1)
+  check("guild " .. Index .. ": refresh clears previous selection", Dropdown.getFunc() == "/")
+  MenuInfo[5] = {5, "Citron"}
+end
+Bag = {}
+RefreshButtons[1].func()
+check("empty backpack produces only the placeholder", #WG_Guild_1_Item.data.choices == 1 and WG_Guild_1_Item.data.choices[1] == "/")
+zo_strformat = OriginalFormat
+
+print(string.format("deposit, knowledge and menu passed=%d failed=%d", Passed, Failed))
 if Failed > 0 then os.exit(1) end

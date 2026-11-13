@@ -75,14 +75,17 @@ local function ItemList()
     local Tep = GetItemLink(1, i)
     if Tep ~= "" then
       if not Repeat[Tep] then
-        table.insert(Sort, {Tep, GetItemLinkItemId(Tep)})
+        table.insert(Sort, {Tep, GetItemLinkDisplayQuality(Tep),
+          LocaleAwareToLower(zo_strformat(SI_TOOLTIP_ITEM_NAME, GetItemLinkName(Tep)))})
         Repeat[Tep] = true
       end
     end
   end
   table.sort(Sort, 
     function(a, b)
-      return a[2] < b[2]
+      if a[2] ~= b[2] then return a[2] < b[2] end
+      if a[3] ~= b[3] then return a[3] < b[3] end
+      return a[1] < b[1]
     end
   )
   for i = 1, #Sort do

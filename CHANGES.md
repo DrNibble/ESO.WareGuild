@@ -1,5 +1,32 @@
 # CHANGES
 
+## 2026-11-13 - v0.31 (tri des objets du sac à dos)
+
+- **Champ concerné** : « Sélectionner un objet du sac à dos pour créer
+  des étapes », dans chacun des cinq menus de banque de guilde.
+- **Ordre croissant** : qualité affichée d'abord, puis nom localisé
+  formaté avec `SI_TOOLTIP_ITEM_NAME`, comparé sans tenir compte de la
+  casse via `LocaleAwareToLower`. Le lien d'objet départage les noms et
+  qualités identiques pour conserver un ordre déterministe.
+- **Sélection conservée** : les choix restent les liens originaux ;
+  les variantes ne sont pas fusionnées. Les liens en double sont
+  toujours masqués, les slots vides ignorés et « / » reste en tête.
+  Le même tri est recalculé par le bouton de rafraîchissement.
+- **API vérifiées** : `GetItemLinkDisplayQuality`, `GetItemLinkName` et
+  `LocaleAwareToLower` dans la
+  [documentation ESOUI live](https://github.com/esoui/esoui/blob/f819c808d57e237707c76e7b52518e2589c9e191/ESOUIDocumentation.txt).
+- **Version et manifeste** : version `0.31` dans Main.lua et
+  WareGuild.addon ; AddOnVersion `20261113` inchangé.
+- **Tests hors jeu** : huit fichiers compilés en Lua 5.1 et
+  **318 assertions réussies**, dont 42 nouveaux contrôles sur les vrais
+  menus : qualité prioritaire sur le nom, casse et suffixes grammaticaux,
+  égalités, variantes, doublons, sac vide, sélection d'un lien et création
+  de sa règle, ordre recalculé et sélection effacée au rafraîchissement.
+
+**Non testé dans ESO** : les comparaisons et les callbacks du menu sont
+simulés hors jeu ; le rendu et le classement des caractères accentués
+restent à vérifier avec la langue du client.
+
 ## 2026-11-13 - v0.30 (ajustement du manifeste)
 
 - **Nom du manifeste** : renommage de `WareGuild/WareGuild.txt` en
