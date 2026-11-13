@@ -70,6 +70,7 @@ WG.Lang = {
   ["CHAT_REGROUP_NO_SPACE"] = "Cannot regroup <<1>>: insufficient backpack space. Continuing with the normal deposit.",
   ["CHAT_REGROUP_SKIPPED"] = "Cannot regroup <<1>>: missing withdrawal permission or changed bank contents. Continuing with the deposit.",
   ["CHAT_REGROUP_FAILED"] = "Transfer interrupted for <<1>>. Check remaining items in your backpack and guild bank before restarting.",
+  ["CHAT_REGROUP_MISMATCH"] = "Cannot regroup <<1>>: the bank holds the same item with a different level, quality or link (backpack: <<2>> lvl <<3>> CP <<4>> quality <<5>>; bank: <<6>> lvl <<7>> CP <<8>> quality <<9>>).",
   
   --Setting, Need to Translate
   

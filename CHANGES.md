@@ -1,5 +1,18 @@
 # CHANGES
 
+## 2026-11-13 - v0.37 (diagnostic du regroupement au dépôt)
+
+- **Regroupement au dépôt (pierres d'âme, etc.)** : le mécanisme existe depuis
+  la v0.29 (retrait des piles de la banque, regroupement dans le sac,
+  dépôt du montant nécessaire, conservation du montant à garder). Il est
+  ignoré quand les piles de la banque ne sont pas strictement identiques
+  (niveau, PC, qualité, trait ou lien) à celles du sac.
+- **Nouveau message** : lorsque la banque contient le même objet mais que la
+  pile est rejetée, le chat affiche les liens, niveaux, PC et qualités du sac
+  et de la banque, afin de déterminer la cause réelle sans deviner. Aucun
+  assouplissement du contrôle pour l'instant : fusionner des niveaux
+  différents risquerait de déposer le mauvais objet. Non testé dans ESO.
+
 ## 2026-11-13 - v0.36 (retrait des lignes de suivi)
 
 - **Lignes de suivi retirées** : la ligne « dans le sac / à retirer /

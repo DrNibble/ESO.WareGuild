@@ -337,6 +337,15 @@ run(storeAll())
 check("legacy internal-level match does not merge different levels", Bank[6] and Bank[6].level == 2)
 check("different required level is not borrowed", numOps("take") == 2)
 
+reset(); Bag[0] = item(30157, 25); Bank[4] = item(30157, 2, 200, 1, 2)
+run({{GuildId = 42, Type = WAREGUILD_TAKE_TO, ItemId = 30157, Count = 5}})
+check("rejected bank stack of other level is reported", hasMessage("different level, quality or link") and hasMessage("lvl 2"))
+check("rejected bank stack: normal deposit completes", total(1, 30157) == 5 and total(3, 30157) == 22 and numOps("take") == 0)
+
+reset(); example()
+run({{GuildId = 42, Type = WAREGUILD_TAKE_TO, ItemId = 30157, Count = 5}})
+check("no mismatch message when regroup works", not hasMessage("different level, quality or link"))
+
 reset(); example()
 OnWithdrawal = function() Permission = false end
 run(storeTo(25))

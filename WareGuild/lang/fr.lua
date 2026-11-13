@@ -70,6 +70,7 @@ WG.Lang = {
   ["CHAT_REGROUP_NO_SPACE"] = "Regroupement de <<1>> ignoré : place insuffisante dans le sac à dos. Le dépôt habituel continue.",
   ["CHAT_REGROUP_SKIPPED"] = "Regroupement de <<1>> ignoré : droit de retrait absent ou contenu de banque modifié. Le dépôt continue.",
   ["CHAT_REGROUP_FAILED"] = "Transfert de <<1>> interrompu. Vérifiez les objets restants dans le sac à dos et en banque de guilde avant de relancer.",
+  ["CHAT_REGROUP_MISMATCH"] = "Regroupement de <<1>> ignoré : la banque contient le même objet mais d'un autre niveau, qualité ou lien (sac : <<2>> niv <<3>> PC <<4>> qualité <<5>> ; banque : <<6>> niv <<7>> PC <<8>> qualité <<9>>).",
   
   --Setting, Need to Translate
   

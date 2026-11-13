@@ -70,6 +70,7 @@ WG.Lang = {
   ["CHAT_REGROUP_NO_SPACE"] = "<<1>> 合堆已跳过：背包空间不足。继续正常存入。",
   ["CHAT_REGROUP_SKIPPED"] = "<<1>> 合堆已跳过：无取出权限或银行内容已变化。继续存入。",
   ["CHAT_REGROUP_FAILED"] = "<<1>> 转移中断。请检查背包和公会银行中剩余的物品后再重试。",
+  ["CHAT_REGROUP_MISMATCH"] = "<<1>> 合堆已跳过：银行中的同一物品等级、品质或链接不同（背包：<<2>> 等级 <<3>> CP <<4>> 品质 <<5>>；银行：<<6>> 等级 <<7>> CP <<8>> 品质 <<9>>）。",
   
   --Setting, Need to Translate
   

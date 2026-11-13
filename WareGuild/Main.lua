@@ -3,7 +3,7 @@ local WG = SDC_WareGuild
 WG.name = "WareGuild"
 WG.title = "WareGuild"
 WG.author = "@MelanAster"
-WG.version = "0.36"
+WG.version = "0.37"
 
 --Default Setting
 WG.Default = {
@@ -709,6 +709,23 @@ local function WithdrawDeposit(Target)
     end)
 end
 
+--Diagnostic: Same ItemId Exists in the Bank but Was Rejected by the Strict Stack Check.
+local function ReportRegroupMismatch(Target)
+  local Id = GetItemLinkItemId(Target.ItemLink)
+  for Slot in WG.GuildBankSlots do
+    local Link = GetItemLink(3, Slot)
+    if Link ~= "" and GetItemLinkItemId(Link) == Id then
+      local function Raw(Value) return (string.match(Value, "item:[%d:]+") or Value) end
+      d("[WareGuild] " .. zo_strformat(WG.Lang.CHAT_REGROUP_MISMATCH, Target.ItemLink,
+        Raw(Target.ItemLink), GetItemLinkRequiredLevel(Target.ItemLink),
+        GetItemLinkRequiredChampionPoints(Target.ItemLink), GetItemLinkQuality(Target.ItemLink),
+        Raw(Link), GetItemLinkRequiredLevel(Link), GetItemLinkRequiredChampionPoints(Link),
+        GetItemLinkQuality(Link)))
+      return
+    end
+  end
+end
+
 local function BeginDeposit(Target)
   if Target.Started then return end
   if Target.KnowledgeRule and not WG.IsUnknownToOtherCharacters(Target.ItemLink) then
@@ -726,7 +743,11 @@ local function BeginDeposit(Target)
     local BagSlots, BankSlots = DepositSlots(Target, 1), DepositSlots(Target, 3)
     if #BagSlots == 0 then StoreDeposit(Target) return end
     if BagSlots.Total < Target.Count then StoreDeposit(Target) return end
-    if #BankSlots == 0 then StoreDeposit(Target) return end
+    if #BankSlots == 0 then
+      ReportRegroupMismatch(Target)
+      StoreDeposit(Target)
+      return
+    end
     local _, Max = GetSlotStackSize(1, BagSlots[1].SlotId)
     if Max <= 1 then StoreDeposit(Target) return end
     if GetNumBagFreeSlots(1) < WG.GuildBankRegroupSpace(BagSlots, BankSlots, Max, Target.Count) then
