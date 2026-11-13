@@ -288,18 +288,18 @@ function WG.FindItem(BagId, ItemId, ItemLink, ItemFilter)
     for i in WG.GuildBankSlots do
       local Link = GetItemLink(3, i)
       if DoesItemMatch(Link, ItemId, ItemLink) then
-        --Inventory Totals Also Serve Deposit Rules: Count Stock Even Without Take Permission.
-        local Reason = WG.WithdrawalBlockReason(i, true)
-        if not Reason and IsWritFilter then
-          Reason = WG.WritItemBlockReason(Link, ItemFilter.CraftLevel, ItemFilter.CraftChampionPoints, ItemFilter, 3, i)
-        end
-        if Reason then
-          WG.ReportWithdrawalBlocked(Link, Reason)
-        else
+        -- Inventory Totals Also Serve Deposit Rules: Count Stock Even Without Take Permission.
+        -- local Reason = WG.WithdrawalBlockReason(i, true)
+        -- if not Reason and IsWritFilter then
+          -- Reason = WG.WritItemBlockReason(Link, ItemFilter.CraftLevel, ItemFilter.CraftChampionPoints, ItemFilter, 3, i)
+        -- end
+        -- if Reason then
+          -- WG.ReportWithdrawalBlocked(Link, Reason)
+        -- else
           local count = select(2, GetItemInfo(3, i))
           Total = Total + count
           table.insert(Slot, {["BagId"] = 3, ["SlotId"] = i, ["Count"] = count})
-        end
+        -- end
       end
     end
   end
@@ -799,19 +799,19 @@ local function MatchesWithdrawalItem(Link, Expected)
 end
 
 local function TakeGuildBankItem(Target)
-  local Link = GetItemLink(3, Target.SlotId)
-  local Reason
-  if not MatchesWithdrawalItem(Link, Target.ItemLink)
-    or select(2, GetItemInfo(3, Target.SlotId)) ~= Target.Count then
-    Reason = WG.Lang.CHAT_WITHDRAW_CHANGED
-  else
-    Reason = WG.WithdrawalBlockReason(Target.SlotId)
-  end
-  if Reason then
-    WG.ReportWithdrawalBlocked(Target.ItemLink, Reason)
-    WG.GuildBankQueue(true)
-    return
-  end
+  --local Link = GetItemLink(3, Target.SlotId)
+  -- local Reason
+  -- if not MatchesWithdrawalItem(Link, Target.ItemLink)
+    -- or select(2, GetItemInfo(3, Target.SlotId)) ~= Target.Count then
+    -- Reason = WG.Lang.CHAT_WITHDRAW_CHANGED
+  -- else
+    -- Reason = WG.WithdrawalBlockReason(Target.SlotId)
+  -- end
+  -- if Reason then
+    -- WG.ReportWithdrawalBlocked(Target.ItemLink, Reason)
+    -- WG.GuildBankQueue(true)
+    -- return
+  -- end
   local function BackpackCount()
     local Total = 0
     for Slot = 0, GetBagSize(1) - 1 do
