@@ -58,7 +58,6 @@ WG.Lang = {
   ["CHAT_WITHDRAW_LEVEL"] = "等级不匹配：需要 <<1>> / CP <<2>>，实际 <<3>> / CP <<4>>",
   ["CHAT_WITHDRAW_CONDITION"] = "物品不满足任务日志条件",
   ["CHAT_WITHDRAW_NOTICE"] = "[<<1>>] <<2>>：<<3>>。",
-  ["CHAT_WRIT_PLAN"] = "背包中：<<1>>；需取出：<<2>>；此银行可用：<<3>>",
   ["CHAT_WITHDRAW_REFERENCE"] = "在制造台之外无法获取参考制造等级；不比较精确等级，由任务日志条件验证材料等级",
   ["CHAT_WITHDRAW_DATA"] = "WareGuild 缺少物品与制造材料的对应数据",
   ["CHAT_WITHDRAW_NOT_FOUND"] = "此银行中没有匹配物品；请检查此步骤所选的公会",

@@ -619,7 +619,7 @@ end
 tierSetup(); run(dailySteps())
 local Maple, RubyAsh = bagVariants()
 check("no reference: only the journal-accepted tier is withdrawn", Maple == 0 and RubyAsh >= 1 and total(3, 43559) >= 1)
-check("finished writ item reports backpack, withdrawal and bank counts", hasMessage("in backpack: 0; to withdraw: 2; available in this bank: 2"))
+check("no per-item tracking line is printed", not hasMessage("in backpack:"))
 check("no reference: the rejected tier stays in the bank", Bank[2455] ~= nil and Bank[2455].variant == 2)
 tierSetup(true); run(dailySteps())
 Maple, RubyAsh = bagVariants()

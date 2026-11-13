@@ -3,7 +3,7 @@ local WG = SDC_WareGuild
 WG.name = "WareGuild"
 WG.title = "WareGuild"
 WG.author = "@MelanAster"
-WG.version = "0.35"
+WG.version = "0.36"
 
 --Default Setting
 WG.Default = {
@@ -928,12 +928,6 @@ function WG.GuildBankWork(DoRemove)
     if bank.Type == WAREGUILD_TAKE_TO then
       local BagSlot = WG.FindItem(1, bank.ItemId, bank.ItemLink, bank)
       local ToTake = bank.Count - BagSlot["Total"]
-      --Finished Writ Item: Say What Was Found, so a Missing Item Can Be Traced
-      if bank.WritProduct then
-        WG.ReportWithdrawalNotice(bank.ItemLink or ToLink(bank.ItemId),
-          zo_strformat(WG.Lang.CHAT_WRIT_PLAN, BagSlot["Total"], math.max(ToTake, 0), Slot["Total"]),
-          bank.GuildId)
-      end
       --Need to take
       if ToTake > 0 then
         --Not Enough Items

@@ -58,7 +58,6 @@ WG.Lang = {
   ["CHAT_WITHDRAW_LEVEL"] = "niveau incompatible : attendu <<1>> / PC <<2>>, trouvé <<3>> / PC <<4>>",
   ["CHAT_WITHDRAW_CONDITION"] = "objet non accepté par la condition du journal de quêtes",
   ["CHAT_WITHDRAW_NOTICE"] = "[<<1>>] <<2>> : <<3>>.",
-  ["CHAT_WRIT_PLAN"] = "dans le sac : <<1>> ; à retirer : <<2>> ; disponible dans cette banque : <<3>>",
   ["CHAT_WITHDRAW_REFERENCE"] = "niveau de craft de référence indisponible hors établi d'artisanat ; niveau exact non comparé, la condition du journal valide le palier du matériau",
   ["CHAT_WITHDRAW_DATA"] = "correspondance objet/matériau de craft absente des données WareGuild",
   ["CHAT_WITHDRAW_NOT_FOUND"] = "aucun exemplaire compatible trouvé dans cette banque ; vérifier la guilde choisie pour cette étape",

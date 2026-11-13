@@ -1,5 +1,18 @@
 # CHANGES
 
+## 2026-11-13 - v0.36 (retrait des lignes de suivi)
+
+- **Lignes de suivi retirées** : la ligne « dans le sac / à retirer /
+  disponible dans cette banque » ajoutée en v0.35 n'est plus affichée. Les
+  règles de retrait ne changent pas.
+- **Contrôle du niveau exact par la passive d'artisanat : non ajouté.** Le
+  matériau du writ (`MaterialId` de la condition) correspond un pour un au
+  rang de la passive (10 paliers en forge, couture et bois) ; lire la passive
+  n'apporte donc aucune information de plus, et demande de retrouver la bonne
+  passive par métier avec des API vérifiables seulement en jeu. Le palier est
+  déjà validé par la condition du journal. Un niveau exact par palier
+  supposerait une table codée en dur non vérifiée dans ESO.
+
 ## 2026-11-13 - v0.35 (diagnostic des objets finis manquants)
 
 - **Ligne de suivi par objet fini de commande journalière** : avant chaque

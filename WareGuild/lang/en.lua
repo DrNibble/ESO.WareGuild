@@ -58,7 +58,6 @@ WG.Lang = {
   ["CHAT_WITHDRAW_LEVEL"] = "level mismatch: expected <<1>> / CP <<2>>, found <<3>> / CP <<4>>",
   ["CHAT_WITHDRAW_CONDITION"] = "item not accepted by the journal quest condition",
   ["CHAT_WITHDRAW_NOTICE"] = "[<<1>>] <<2>>: <<3>>.",
-  ["CHAT_WRIT_PLAN"] = "in backpack: <<1>>; to withdraw: <<2>>; available in this bank: <<3>>",
   ["CHAT_WITHDRAW_REFERENCE"] = "reference craft level unavailable away from a crafting station; exact level not compared, the journal condition validates the material tier",
   ["CHAT_WITHDRAW_DATA"] = "item/crafting-material mapping missing from WareGuild data",
   ["CHAT_WITHDRAW_NOT_FOUND"] = "no matching item found in this bank; check the guild selected for this step",
