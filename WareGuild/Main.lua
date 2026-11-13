@@ -605,11 +605,22 @@ local function DepositSlots(Target, BagId)
   for _, Slot in ipairs(Candidates) do
     local Link = GetItemLink(BagId, Slot.SlotId)
     --FindItem's Legacy Internal-Level Workaround Is Broader Than Stacking.
+    --Guild-bank stackable stacks: a bank link reporting internal level 0/1
+    --with another level in the backpack is the known guild-bank link bug, not
+    --another craft level: the same ItemId stack is the same item and must be
+    --regrouped. Genuinely different levels (a real level gap, or non-stackable
+    --gear whose ItemId exists at several tiers) still never merge.
+    local _, Max = GetSlotStackSize(BagId, Slot.SlotId)
+    local Level = GetItemLinkRequiredLevel(Link)
+    local BankLinkBug = BagId == 3 and Max > 1
+      and (Level == 0 or Level == 1)
+      and Level ~= GetItemLinkRequiredLevel(Target.ItemLink)
     if (not Target.KnowledgeRule or KnowledgeSlotAllowed(BagId, Slot.SlotId))
       and GetItemLinkQuality(Link) == GetItemLinkQuality(Target.ItemLink)
       and GetItemLinkTraitInfo(Link) == GetItemLinkTraitInfo(Target.ItemLink)
-      and GetItemLinkRequiredLevel(Link) == GetItemLinkRequiredLevel(Target.ItemLink)
-      and GetItemLinkRequiredChampionPoints(Link) == GetItemLinkRequiredChampionPoints(Target.ItemLink) then
+      and (BankLinkBug
+        or (Level == GetItemLinkRequiredLevel(Target.ItemLink)
+          and GetItemLinkRequiredChampionPoints(Link) == GetItemLinkRequiredChampionPoints(Target.ItemLink))) then
       table.insert(Slots, Slot)
       Slots.Total = Slots.Total + Slot.Count
     end
@@ -646,7 +657,12 @@ local function PackDeposit(Target, Continue)
 end
 
 local function StoreDeposit(Target)
-  if Target.Remaining <= 0 then WG.GuildBankQueue(true) return end
+  if Target.Remaining <= 0 then
+    if Target.Borrowed then
+      d("[WareGuild] " .. zo_strformat(WG.Lang.CHAT_REGROUP_DONE, Target.ItemLink, Target.DepositTotal))
+    end
+    WG.GuildBankQueue(true) return
+  end
   local Slots = DepositSlots(Target, 1)
   local Source = Slots[1]
   if not Source or Slots.Total < Target.Remaining then
@@ -686,7 +702,7 @@ end
 
 local function WithdrawDeposit(Target)
   local Source = Target.Withdrawals[Target.WithdrawIndex]
-  if not Source then StoreDeposit(Target) return end
+  if not Source then Target.Borrowed = true StoreDeposit(Target) return end
   --Recheck Permissions, Space and Slot Identity Before Every Whole-Stack Take.
   local Current
   for _, Slot in ipairs(DepositSlots(Target, 3)) do
@@ -761,6 +777,9 @@ local function BeginDeposit(Target)
       return
     end
     Target.Withdrawals, Target.WithdrawIndex = BankSlots, 1
+    Target.DepositTotal = Target.Count + BankSlots.Total
+    d("[WareGuild] " .. zo_strformat(WG.Lang.CHAT_REGROUP_BORROW, Target.ItemLink,
+      #BankSlots, BankSlots.Total))
     WithdrawDeposit(Target)
   end)
 end

@@ -71,6 +71,8 @@ WG.Lang = {
   ["CHAT_REGROUP_SKIPPED"] = "Regroupement de <<1>> ignoré : droit de retrait absent ou contenu de banque modifié. Le dépôt continue.",
   ["CHAT_REGROUP_FAILED"] = "Transfert de <<1>> interrompu. Vérifiez les objets restants dans le sac à dos et en banque de guilde avant de relancer.",
   ["CHAT_REGROUP_MISMATCH"] = "Regroupement de <<1>> ignoré : la banque contient le même objet mais d'un autre niveau, qualité ou lien (sac : <<2>> niv <<3>> PC <<4>> qualité <<5>> ; banque : <<6>> niv <<7>> PC <<8>> qualité <<9>>).",
+  ["CHAT_REGROUP_BORROW"] = "Regroupement de <<1>> : retrait de <<2>> pile(s) existante(s) de la banque (<<3>> au total) pour les empiler dans le sac à dos.",
+  ["CHAT_REGROUP_DONE"] = "Regroupement de <<1>> terminé : <<2>> redéposé(s) en banque de guilde en une seule pile.",
   
   --Setting, Need to Translate
   

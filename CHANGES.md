@@ -1,5 +1,45 @@
 # CHANGES
 
+## 2026-11-13 - v0.38 (regroupement des piles existantes de la banque de guilde)
+
+**Problème** : en v0.37, quand une règle « garder N dans le sac » détectait un
+excédent, l'excédent était redéposé en banque de guilde comme une nouvelle
+pile, sans reprendre les piles déjà existantes. Exemple rapporté : 3+2+5
+pierres d'âme en banque, 12 dans le sac, règle « garder 10 ». Le comportement
+attendu : retirer les piles 3+2+5, les empiler avec le sac (22), redéposer
+12 en une seule pile et garder 10 dans le sac. Le mécanisme (v0.29) existait
+mais était silencieusement ignoré, sans aucun message de chat.
+
+**Cause** : le contrôle d'identité strict avant emprunt (`DepositSlots`)
+comparait le niveau et les PC du lien de chaque pile de banque au lien du
+sac. Or la banque de guilde renvoie des liens dont le niveau interne est
+dégradé à 0 ou 1 (bug connu des liens d'objets en banque de guilde, déjà
+contourné dans `WG.FindItem`). Toutes les piles de la banque étaient donc
+rejetées : aucun emprunt, dépôt d'un excédent en pile séparée.
+
+- **Assouplissement ciblé** : pour une pile empilable de la banque
+  (`Max > 1`) dont le lien annonce un niveau interne 0 ou 1 différent de
+  celui du sac, la comparaison de niveau/PC est ignorée — même `ItemId`,
+  même objet, la pile est empruntée pour regroupement. Les autres contrôles
+  restent inchangés : un vrai écart de niveau (ex. niveau 2), une variante
+  de lien différente, un objet non empilable (équipement de writ dont le
+  même `ItemId` existe à plusieurs paliers) ne sont toujours jamais
+  fusionnés, et le message de diagnostic v0.37 s'affiche toujours pour ces
+  cas-là.
+- **Nouveaux messages** : le chat annonce le début du regroupement
+  (« Regroupement de X : retrait de N pile(s) existante(s) de la banque
+  (M au total)… ») et sa fin (« … M redéposé(s) en banque de guilde en une
+  seule pile »). Ils remplacent le silence qui rendait le bug difficile à
+  diagnostiquer.
+
+**Tests** : reprise du scénario exact (12 dans le sac, 3+2+5 en banque, bug
+de lien niveau 0) — avant correctif : aucune pile empruntée et message
+d'écart ; après correctif : 3 piles empruntées, 12 redéposés en une seule
+pile, 10 dans le sac, messages affichés. Les 401 tests existants et
+nouveaux passent.
+
+**Non testé dans ESO** : validation hors jeu uniquement.
+
 ## 2026-11-13 - v0.37 (diagnostic du regroupement au dépôt)
 
 - **Regroupement au dépôt (pierres d'âme, etc.)** : le mécanisme existe depuis

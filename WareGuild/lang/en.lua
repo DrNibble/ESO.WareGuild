@@ -71,6 +71,8 @@ WG.Lang = {
   ["CHAT_REGROUP_SKIPPED"] = "Cannot regroup <<1>>: missing withdrawal permission or changed bank contents. Continuing with the deposit.",
   ["CHAT_REGROUP_FAILED"] = "Transfer interrupted for <<1>>. Check remaining items in your backpack and guild bank before restarting.",
   ["CHAT_REGROUP_MISMATCH"] = "Cannot regroup <<1>>: the bank holds the same item with a different level, quality or link (backpack: <<2>> lvl <<3>> CP <<4>> quality <<5>>; bank: <<6>> lvl <<7>> CP <<8>> quality <<9>>).",
+  ["CHAT_REGROUP_BORROW"] = "Regrouping <<1>>: withdrawing <<2>> existing bank stack(s) (<<3>> in total) to stack them in the backpack.",
+  ["CHAT_REGROUP_DONE"] = "Regrouped <<1>>: <<2>> deposited back into the guild bank as a single stack.",
   
   --Setting, Need to Translate
   

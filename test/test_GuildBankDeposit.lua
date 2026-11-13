@@ -988,5 +988,41 @@ RefreshButtons[1].func()
 check("empty backpack produces only the placeholder", #WG_Guild_1_Item.data.choices == 1 and WG_Guild_1_Item.data.choices[1] == "/")
 zo_strformat = OriginalFormat
 
+--Guild-bank link bug: the bank reports internal level 0/1 in its item links
+--while the backpack reports the real level. A TAKE_TO rule keeping 10 with 12
+--in the bag must borrow every existing bank stack (3+2+5), stack them in the
+--backpack and redeposit the whole amount (12) as one stack.
+reset()
+Bag[0] = item(30157, 12)
+Bank[4], Bank[5], Bank[6] = item(30157, 3), item(30157, 2), item(30157, 5)
+local RealGetItemLink = GetItemLink
+GetItemLink = function(BagId, Slot)
+  local Text = RealGetItemLink(BagId, Slot)
+  if BagId == 3 and Text ~= "" then
+    return Text:gsub("^(|H1:item:%d+:%d+):%d+:", "%1:0:")
+  end
+  return Text
+end
+run({{GuildId = 42, Type = WAREGUILD_TAKE_TO, ItemId = 30157, Count = 10}})
+GetItemLink = RealGetItemLink
+check("link bug: exactly 10 stay in the backpack", total(1, 30157) == 10)
+check("link bug: all 22 items conserved", total(1, 30157) + total(3, 30157) == 22)
+check("link bug: the 12 redeposited form one bank stack",
+  total(3, 30157) == 12 and select(2, total(3, 30157)) == 1)
+check("link bug: all three bank stacks borrowed", numOps("take") == 3)
+check("link bug: no mismatch message when regroup runs",
+  not hasMessage("different level, quality or link"))
+check("link bug: borrowing the stacks is announced", hasMessage("withdrawing"))
+check("link bug: the redeposit is announced", hasMessage("deposited back"))
+
+--Same scenario without the link bug: identical behavior, still one message.
+reset()
+Bag[0] = item(30157, 12)
+Bank[4], Bank[5], Bank[6] = item(30157, 3), item(30157, 2), item(30157, 5)
+run({{GuildId = 42, Type = WAREGUILD_TAKE_TO, ItemId = 30157, Count = 10}})
+check("no link bug: 10 in the bag and one bank stack of 12",
+  total(1, 30157) == 10 and total(3, 30157) == 12 and select(2, total(3, 30157)) == 1)
+check("no link bug: borrowing announced once", numOps("take") == 3)
+
 print(string.format("deposit, knowledge and menu passed=%d failed=%d", Passed, Failed))
 if Failed > 0 then os.exit(1) end
