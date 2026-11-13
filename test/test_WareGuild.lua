@@ -59,12 +59,12 @@ GetItemLinkStacks = function(link)
   local s = Stacks[id] or {0, 0, 0}
   return s[1], s[2], s[3]
 end
-GetNextGuildBankSlotId = function()
+GetNextGuildBankSlotId = function(Previous)
   if not GuildBank then return nil end
-  -- real guild bank slots are contiguous: return the first (lowest) slot
+  -- Native iterator: return the next occupied sparse slot after Previous.
   local First
   for slot in pairs(GuildBank) do
-    if not First or slot < First then First = slot end
+    if (Previous == nil or slot > Previous) and (not First or slot < First) then First = slot end
   end
   return First
 end
@@ -162,9 +162,24 @@ GetJournalQuestConditionValues = function(idx, step, cond)
 end
 
 -- events / scenes / misc
+EVENT_GUILD_BANK_ITEMS_READY = "bank-ready"
+EVENT_GUILD_BANK_SELECTED, EVENT_GUILD_BANK_DESELECTED = "bank-selected", "bank-deselected"
+EVENT_OPEN_GUILD_BANK, EVENT_CLOSE_GUILD_BANK = "bank-open", "bank-close"
+EVENT_GUILD_BANK_OPEN_ERROR, EVENT_GUILD_BANK_TRANSFER_ERROR = "bank-open-error", "bank-transfer-error"
+EVENT_GUILD_BANK_ITEM_REMOVED, EVENT_GUILD_BANK_ITEM_ADDED = "bank-removed", "bank-added"
+EVENT_INVENTORY_SINGLE_SLOT_UPDATE = "inventory-slot"
+GUILD_PERMISSION_BANK_WITHDRAW = "withdraw"
+local RegisteredEvents = {}
 EVENT_MANAGER = {
-  RegisterForEvent = function() end,
-  UnregisterForEvent = function() end,
+  RegisterForEvent = function(_, Name, Event, Callback)
+    if Event then
+      RegisteredEvents[Name] = RegisteredEvents[Name] or {}
+      RegisteredEvents[Name][Event] = Callback
+    end
+  end,
+  UnregisterForEvent = function(_, Name, Event)
+    if RegisteredEvents[Name] and Event then RegisteredEvents[Name][Event] = nil end
+  end,
   AddFilterForEvent = function() end,
 }
 SCENE_MANAGER = {
@@ -173,6 +188,11 @@ SCENE_MANAGER = {
   IsShowing = function() return false end,
 }
 d = function() end
+zo_callLater = function() end
+GetSelectedGuildBankId = function() return 42 end
+GetGuildName = function(Id) return "Guild " .. tostring(Id) end
+IsItemPlayerLocked = function() return false end
+DoesPlayerHaveGuildPermission = function() return true end
 zo_strformat = function(s) return s end
 GetString = function(s) return "SI" .. tostring(s) end
 CRAFTING_TYPE_BLACKSMITHING = 1
@@ -692,7 +712,7 @@ local Transfers = {}
 TransferFromGuildBank = function(slot) table.insert(Transfers, slot) end
 SCENE_SHOWN = "shown"
 WG.GuildBankCore({name = "guildBank"}, nil, SCENE_SHOWN)
-WG.GuildBankWork(false)
+RegisteredEvents[WG.name .. "_BankState"][EVENT_GUILD_BANK_ITEMS_READY]()
 check("daily step transfers only right-level bank slot", #Transfers == 1 and Transfers[1] == 5)
 check("wrong-level bag item does not suppress actual withdrawal", #Transfers == 1)
 WG.AllGuildStep = realAllGuildStep

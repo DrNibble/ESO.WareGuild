@@ -3,7 +3,7 @@ local WG = SDC_WareGuild
 WG.name = "WareGuild"
 WG.title = "WareGuild"
 WG.author = "@MelanAster"
-WG.version = "0.31"
+WG.version = "0.32"
 
 --Default Setting
 WG.Default = {
@@ -184,6 +184,38 @@ local function FCOISAllow(bagId, slotIndex)
   end
 end
 
+local WithdrawalMessages = {}
+function WG.ReportWithdrawalBlocked(ItemLink, Reason, GuildId)
+  GuildId = GuildId or GetSelectedGuildBankId()
+  local Key = tostring(GuildId) .. ":" .. ItemLink .. ":" .. Reason
+  if WithdrawalMessages[Key] then return end
+  WithdrawalMessages[Key] = true
+  d("[WareGuild] " .. zo_strformat(WG.Lang.CHAT_WITHDRAW_BLOCKED,
+    GetGuildName(GuildId), ItemLink, Reason))
+end
+
+function WG.WithdrawalBlockReason(SlotId, IgnorePermission)
+  if not FCOISAllow(3, SlotId) then return WG.Lang.CHAT_WITHDRAW_FCOIS end
+  if IsItemPlayerLocked(3, SlotId) then return WG.Lang.CHAT_WITHDRAW_LOCKED end
+  if not IgnorePermission and not DoesPlayerHaveGuildPermission(GetSelectedGuildBankId(), GUILD_PERMISSION_BANK_WITHDRAW) then
+    return WG.Lang.CHAT_WITHDRAW_PERMISSION
+  end
+end
+
+function WG.WritItemBlockReason(Link, Level, CP)
+  if GetItemLinkQuality(Link) ~= ITEM_QUALITY_NORMAL then return WG.Lang.CHAT_WITHDRAW_QUALITY end
+  if GetItemLinkTraitInfo(Link) ~= ITEM_TRAIT_TYPE_NONE then return WG.Lang.CHAT_WITHDRAW_TRAIT end
+  if GetItemLinkRequiredLevel(Link) ~= Level or GetItemLinkRequiredChampionPoints(Link) ~= CP then
+    return zo_strformat(WG.Lang.CHAT_WITHDRAW_LEVEL, Level, CP,
+      GetItemLinkRequiredLevel(Link), GetItemLinkRequiredChampionPoints(Link))
+  end
+end
+
+--Guild Bank Slots Are Sparse IDs, Not a Contiguous Range of 500 Slots.
+function WG.GuildBankSlots(_, Previous)
+  return GetNextGuildBankSlotId(Previous)
+end
+
 --Patch for Bug of ItemLink in Guild Bank
 local function DoesItemMatch(Link, ItemId, ItemLink)
   --No Link Get
@@ -231,12 +263,17 @@ function WG.FindItem(BagId, ItemId, ItemLink, ItemFilter)
 
   --Current Guild Bank
   elseif BagId == 3 then
-    --GetNextGuildBankSlotId Returns nil When the Bank is Empty
-    local StartPoint = GetNextGuildBankSlotId()
-    if StartPoint then
-      for i = StartPoint, StartPoint + 500 do
-        local Link = GetItemLink(3, i)
-        if FCOISAllow(3, i) and DoesItemMatch(Link, ItemId, ItemLink) and MatchesCraftLevel(Link) then
+    for i in WG.GuildBankSlots do
+      local Link = GetItemLink(3, i)
+      if DoesItemMatch(Link, ItemId, ItemLink) then
+        --Inventory Totals Also Serve Deposit Rules: Count Stock Even Without Take Permission.
+        local Reason = WG.WithdrawalBlockReason(i, true)
+        if not Reason and ItemFilter and ItemFilter.CraftLevel ~= nil then
+          Reason = WG.WritItemBlockReason(Link, ItemFilter.CraftLevel, ItemFilter.CraftChampionPoints)
+        end
+        if Reason then
+          WG.ReportWithdrawalBlocked(Link, Reason)
+        else
           local count = select(2, GetItemInfo(3, i))
           Total = Total + count
           table.insert(Slot, {["BagId"] = 3, ["SlotId"] = i, ["Count"] = count})
@@ -342,9 +379,10 @@ end
 --Should Stack?
 local function NotFull(SlotId)
   local Now, Max = GetSlotStackSize(1, SlotId)
-  return Now < Max
+  return Now > 0 and Now < Max and FCOISAllow(1, SlotId) and not IsItemPlayerLocked(1, SlotId)
 end
 
+local StackPending
 local function ShouldStack()
   for a = 0, GetBagSize(1) - 1 do
     local ItemLink = GetItemLink(1, a)
@@ -364,21 +402,36 @@ local function StackItem(SlotIdList, Fun)
   local NewList = {}
   for i = 1, #SlotIdList do
     local Count, Max = GetSlotStackSize(1, SlotIdList[i]["SlotId"])
-    if Count > 0 and Count < Max then
+    if Count > 0 and Count < Max and NotFull(SlotIdList[i]["SlotId"]) then
       table.insert(NewList, SlotIdList[i])
     end
   end
   --Done?
   if NewList[2] == nil then WG.Stack(Fun) return end
-  --Move
+  --Wait for Both Sides of This Move; Another Addon May Cancel It Silently.
+  local Source, Dest = NewList[#NewList].SlotId, NewList[1].SlotId
+  local BeforeSource = GetSlotStackSize(1, Source)
+  local BeforeDest, Max = GetSlotStackSize(1, Dest)
+  local Count = math.min(BeforeSource, Max - BeforeDest)
+  local Pending = {}
+  StackPending = Pending
   EVENT_MANAGER:RegisterForEvent(WG.name, EVENT_INVENTORY_SINGLE_SLOT_UPDATE, 
-    function(_, BagId, SlotId, IsNew, _, _, NumChange)
-      if NumChange > 0 then return end
+    function(_, BagId, SlotId)
+      if StackPending ~= Pending or BagId ~= 1 or (SlotId ~= Source and SlotId ~= Dest) then return end
+      if GetSlotStackSize(1, Source) ~= BeforeSource - Count
+        or GetSlotStackSize(1, Dest) ~= BeforeDest + Count then return end
+      StackPending = nil
       EVENT_MANAGER:UnregisterForEvent(WG.name, EVENT_INVENTORY_SINGLE_SLOT_UPDATE)
       StackItem(NewList, Fun)
     end
   )
-  CallSecureProtected("RequestMoveItem", 1, NewList[#NewList]["SlotId"], 1, NewList[1]["SlotId"], -1)
+  zo_callLater(function()
+    if StackPending ~= Pending then return end
+    StackPending = nil
+    d("[WareGuild] " .. zo_strformat(WG.Lang.CHAT_STACK_TIMEOUT, GetItemLink(1, Source)))
+    WG.GuildBankEnd()
+  end, 10000)
+  CallSecureProtected("RequestMoveItem", 1, Source, 1, Dest, -1)
 end
 
 --Stack Core
@@ -389,7 +442,7 @@ function WG.Stack(Fun)
     for i = 0, GetBagSize(1) - 1 do
       if ItemLink == GetItemLink(1, i) then
         local Now, Max = GetSlotStackSize(1, i)
-        if Now < Max then
+        if Now < Max and NotFull(i) then
           table.insert(List, {["SlotId"] = i, ["Count"] = Now})
         end
       end
@@ -428,6 +481,46 @@ local Queue = {--[[
 
 local Close = false
 
+local BankReadyGuild, BankWait
+local BankStateEvents = WG.name .. "_BankState"
+local function TryBankWork()
+  local Waiting = BankWait
+  if Waiting and Waiting.Steps == Step and BankReadyGuild == Waiting.GuildId
+    and GetSelectedGuildBankId() == Waiting.GuildId then
+    BankWait = nil
+    WG.GuildBankWork(false)
+  end
+end
+
+--Track Readiness Before SceneStateChanged: READY Can Precede SCENE_SHOWN.
+EVENT_MANAGER:RegisterForEvent(BankStateEvents, EVENT_GUILD_BANK_ITEMS_READY, function()
+  BankReadyGuild = GetSelectedGuildBankId()
+  TryBankWork()
+end)
+for _, Event in ipairs({EVENT_GUILD_BANK_SELECTED, EVENT_GUILD_BANK_DESELECTED,
+  EVENT_OPEN_GUILD_BANK, EVENT_CLOSE_GUILD_BANK}) do
+  EVENT_MANAGER:RegisterForEvent(BankStateEvents, Event, function() BankReadyGuild = nil end)
+end
+EVENT_MANAGER:RegisterForEvent(BankStateEvents, EVENT_GUILD_BANK_OPEN_ERROR, function(_, Reason)
+  if not BankWait then return end
+  d("[WareGuild] " .. zo_strformat(WG.Lang.CHAT_BANK_ERROR,
+    GetGuildName(BankWait.GuildId), GetString("SI_GUILDBANKRESULT", Reason)))
+  WG.GuildBankEnd()
+end)
+
+local function WaitForGuildBank(GuildId)
+  if BankWait and BankWait.Steps == Step and BankWait.GuildId == GuildId then return end
+  local Waiting = {GuildId = GuildId, Steps = Step}
+  BankWait = Waiting
+  d("[WareGuild] " .. zo_strformat(WG.Lang.CHAT_BANK_WAIT, GetGuildName(GuildId)))
+  if GetSelectedGuildBankId() ~= GuildId then SelectGuildBank(GuildId) end
+  zo_callLater(function()
+    if BankWait ~= Waiting or Waiting.Steps ~= Step then return end
+    d("[WareGuild] " .. zo_strformat(WG.Lang.CHAT_BANK_TIMEOUT, GetGuildName(GuildId)))
+    WG.GuildBankEnd()
+  end, 20000)
+end
+
 local DepositEvents = WG.name .. "_Deposit"
 local function ClearDepositEvents()
   EVENT_MANAGER:UnregisterForEvent(DepositEvents, EVENT_INVENTORY_SINGLE_SLOT_UPDATE)
@@ -442,23 +535,24 @@ end
 
 --Wait for Both the Local Bank Acknowledgement and the Backpack Update.
 --The Queue Identity Cancels Old Callbacks After Closing or Switching Sessions.
-local function DepositOperation(Target, BankEvent, BankSlot, Ready, Action, Continue)
+local function DepositOperation(Target, BankEvent, BankSlot, Ready, Action, Continue, OnFailure)
   local Pending = {}
   Target.Pending = Pending
   local BankReady = BankEvent == nil
   local function Active()
     return Queue[1] == Target and Target.Pending == Pending
   end
-  local function Stop()
+  local function Stop(_, Reason, Context)
     if not Active() then return end
     Target.Pending = nil
     ClearDepositEvents()
-    DepositMessage("CHAT_REGROUP_FAILED", Target)
+    if OnFailure then OnFailure(Reason, Context)
+    else DepositMessage("CHAT_REGROUP_FAILED", Target) end
     WG.GuildBankEnd()
   end
   local function Check()
     if not Active() then return end
-    if GetSelectedGuildBankId() ~= Target.GuildId then Stop() return end
+    if GetSelectedGuildBankId() ~= Target.GuildId then Stop(nil, nil, "guild-changed") return end
     if BankReady and Ready() then
       Target.Pending = nil
       ClearDepositEvents()
@@ -628,6 +722,55 @@ local function BeginDeposit(Target)
   end)
 end
 
+local function MatchesWithdrawalItem(Link, Expected)
+  --Preserve the Existing Guild-Bank Internal-Level Link Workaround.
+  return DoesItemMatch(Link, nil, Expected)
+    and GetItemLinkQuality(Link) == GetItemLinkQuality(Expected)
+    and GetItemLinkTraitInfo(Link) == GetItemLinkTraitInfo(Expected)
+    and GetItemLinkRequiredLevel(Link) == GetItemLinkRequiredLevel(Expected)
+    and GetItemLinkRequiredChampionPoints(Link) == GetItemLinkRequiredChampionPoints(Expected)
+end
+
+local function TakeGuildBankItem(Target)
+  local Link = GetItemLink(3, Target.SlotId)
+  local Reason
+  if not MatchesWithdrawalItem(Link, Target.ItemLink)
+    or select(2, GetItemInfo(3, Target.SlotId)) ~= Target.Count then
+    Reason = WG.Lang.CHAT_WITHDRAW_CHANGED
+  else
+    Reason = WG.WithdrawalBlockReason(Target.SlotId)
+  end
+  if Reason then
+    WG.ReportWithdrawalBlocked(Target.ItemLink, Reason)
+    WG.GuildBankQueue(true)
+    return
+  end
+  local function BackpackCount()
+    local Total = 0
+    for Slot = 0, GetBagSize(1) - 1 do
+      if MatchesWithdrawalItem(GetItemLink(1, Slot), Target.ItemLink) then
+        Total = Total + select(2, GetItemInfo(1, Slot))
+      end
+    end
+    return Total
+  end
+  local Before = BackpackCount()
+  Target.GuildId = GetSelectedGuildBankId()
+  DepositOperation(Target, EVENT_GUILD_BANK_ITEM_REMOVED, Target.SlotId,
+    function()
+      return GetItemLink(3, Target.SlotId) == "" and BackpackCount() >= Before + Target.Count
+    end,
+    function() TransferFromGuildBank(Target.SlotId) ClearCursor() end,
+    function() WG.GuildBankQueue(true) end,
+    function(Error, Context)
+      local Failure = WG.Lang.CHAT_WITHDRAW_TIMEOUT
+      if Error ~= nil then
+        Failure = zo_strformat(WG.Lang.CHAT_WITHDRAW_ERROR, tostring(Error), GetString("SI_GUILDBANKRESULT", Error))
+      elseif Context == "guild-changed" then Failure = WG.Lang.CHAT_WITHDRAW_GUILD_CHANGED end
+      WG.ReportWithdrawalBlocked(Target.ItemLink, Failure, Target.GuildId)
+    end)
+end
+
 --When open GuildBank
 function WG.GuildBankCore(scene, _, newstate)
   --GuildBank?
@@ -642,6 +785,9 @@ function WG.GuildBankCore(scene, _, newstate)
   --When Open
   if newstate ~= SCENE_SHOWN then return end
   ClearDepositEvents()
+  StackPending = nil
+  BankWait = nil
+  WithdrawalMessages = {}
   Queue = {}
     --Start to Set Work 
   Step = WG.AllGuildStep()
@@ -656,13 +802,8 @@ function WG.GuildBankCore(scene, _, newstate)
   WG.CV.AutoCraftBag = GetSetting(SETTING_TYPE_LOOT, 4)
   SetSetting(SETTING_TYPE_LOOT, 4, 0)
   
-  EVENT_MANAGER:RegisterForEvent(WG.name, EVENT_GUILD_BANK_ITEMS_READY, 
-    function()
-      EVENT_MANAGER:UnregisterForEvent(WG.name, EVENT_GUILD_BANK_ITEMS_READY)
-      WG.GuildBankWork(false)
-    end
-  )
   Close = false
+  WG.GuildBankWork(false)
 end
 
 --Analyze each step and make queue
@@ -718,14 +859,8 @@ function WG.GuildBankWork(DoRemove)
   local bank = Step[1]
   
   --SelectGuild with stack
-  if GetSelectedGuildBankId() ~= bank.GuildId then
-    EVENT_MANAGER:RegisterForEvent(WG.name, EVENT_GUILD_BANK_ITEMS_READY, 
-      function()
-        EVENT_MANAGER:UnregisterForEvent(WG.name, EVENT_GUILD_BANK_ITEMS_READY)
-        WG.GuildBankWork(false)
-      end
-    )
-    SelectGuildBank(bank.GuildId)
+  if GetSelectedGuildBankId() ~= bank.GuildId or BankReadyGuild ~= bank.GuildId then
+    WaitForGuildBank(bank.GuildId)
     return
   end
 
@@ -761,6 +896,8 @@ function WG.GuildBankWork(DoRemove)
         local Tep = {
           ["Type"] = WAREGUILD_QUEUE_TAKE,
           ["SlotId"] = Slot[i]["SlotId"],
+          ["ItemLink"] = GetItemLink(3, Slot[i]["SlotId"]),
+          ["Count"] = Slot[i]["Count"],
         }
         table.insert(Queue, Tep)
       end
@@ -793,6 +930,8 @@ function WG.GuildBankWork(DoRemove)
           local Tep = {
               ["Type"] = WAREGUILD_QUEUE_TAKE,
               ["SlotId"] = Slot[i]["SlotId"],
+              ["ItemLink"] = GetItemLink(3, Slot[i]["SlotId"]),
+              ["Count"] = Slot[i]["Count"],
             }
           table.insert(Queue, Tep)
           ToTake = ToTake - Slot[i]["Count"]
@@ -943,15 +1082,7 @@ function WG.GuildBankQueue(Event)
       end
       return
     end
-    --Do Take
-    EVENT_MANAGER:RegisterForEvent(WG.name, EVENT_GUILD_BANK_ITEM_REMOVED, 
-    function(Event)
-      EVENT_MANAGER:UnregisterForEvent(WG.name, EVENT_GUILD_BANK_ITEM_REMOVED)
-      WG.GuildBankQueue(true)
-    end
-    )
-    TransferFromGuildBank(Target.SlotId)
-    ClearCursor()
+    TakeGuildBankItem(Target)
   end
   
   --Split
@@ -1010,6 +1141,8 @@ function WG.GuildBankEnd()
   --Reset V
   Step = {}
   Queue = {}
+  BankWait = nil
+  StackPending = nil
   ClearDepositEvents()
   --Unregister
   SCENE_MANAGER:UnregisterCallback("SceneStateChanged", WG.GuildBankCore)

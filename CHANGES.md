@@ -1,5 +1,62 @@
 # CHANGES
 
+## 2026-11-13 - v0.32 (diagnostic et fiabilisation des retraits)
+
+- **Messages de blocage** : nom de guilde, lien d'objet et motif pour
+  FCOItemSaver, verrouillage joueur, droits de retrait, déplacement ou
+  modification d'un slot. Les messages identiques sont dédupliqués
+  pendant une même exécution. Les protections restent respectées.
+- **Commandes journalières** : les équipements candidats sont contrôlés
+  avant de remplacer les matériaux nécessaires. Le chat explique une
+  qualité, un trait ou un niveau incompatible, un refus par la condition
+  du journal, une référence ou une correspondance de matériaux absente,
+  une option de récupération des objets finis désactivée ou l'absence
+  d'exemplaire dans la banque sélectionnée. Les critères restent :
+  qualité blanche, sans trait, tout style et niveau/PC exacts.
+- **Parcours de banque** : remplacement de la plage `premier slot + 500`
+  par l'itérateur natif `GetNextGuildBankSlotId(slotPrécédent)`, dans
+  `FindItem` et les recherches de produits journaliers. Les identifiants
+  d'emplacement non contigus et élevés ne sont plus ignorés. Le modèle
+  est celui de l'[itérateur de l'interface ESOUI](https://github.com/esoui/esoui/blob/f819c808d57e237707c76e7b52518e2589c9e191/esoui/ingame/globals/commoninventoryfunctions.lua).
+- **Chargement de banque** : mémorisation de l'état prêt même si
+  `EVENT_GUILD_BANK_ITEMS_READY` précède l'affichage de la scène, en
+  clavier/souris et gamepad. Une règle ne démarre qu'avec la guilde
+  sélectionnée et chargée attendue. L'état est invalidé à l'ouverture,
+  fermeture, sélection ou désélection ; une attente non confirmée est
+  interrompue après 20 secondes avec un message.
+- **Confirmation des retraits** : attente de l'accusé de retrait local
+  pour le bon slot et de l'arrivée effective dans le sac à dos. Les
+  événements des autres joueurs ne valident pas l'opération. Un refus
+  serveur affiche son code et son libellé ; un transfert non confirmé
+  expire après 10 secondes. Un changement de guilde pendant le transfert
+  est signalé séparément. L'exécution s'arrête sans réessai automatique
+  et restaure le réglage du sac d'artisan. La compensation existante des
+  différences de niveau interne dans les liens banque/sac est conservée,
+  avec contrôle explicite de la qualité, du trait et du niveau requis.
+- **Empilement du sac** : les emplacements protégés ou verrouillés ne
+  sont pas déplacés. Attente des quantités des deux côtés et délai de
+  10 secondes avec message en cas de déplacement silencieusement annulé.
+  Les callbacks périmés ne doivent pas relancer une session terminée.
+- **Dépôts préservés** : le calcul du stock en banque pour `STORE_TO`
+  ne dépend pas du droit de retrait ; ce droit est contrôlé au moment
+  d'un retrait ou du regroupement. Les tests existants de regroupement,
+  de règle LibCharacterKnowledge et de tri des menus restent exécutés.
+- **API vérifiées** : signatures des événements et fonctions dans la
+  [documentation ESOUI live](https://github.com/esoui/esoui/blob/f819c808d57e237707c76e7b52518e2589c9e191/ESOUIDocumentation.txt).
+  Messages livrés en français, anglais et chinois ; version `0.32`
+  dans Main.lua et WareGuild.addon, sans changement des dépendances.
+- **Tests hors jeu** : huit fichiers compilés en Lua 5.1 et
+  **376 assertions réussies** (92 + 284), en chargeant les fichiers
+  effectivement livrés. Scénario de bâton de foudre en chêne de niveau 16
+  (`itemId = 43559`) au slot 2456, guilde cible 44 simulant la troisième
+  banque, ordres inversés des événements de chargement et de transfert,
+  protections, critères du writ, erreurs, délais et fermeture/réouverture.
+
+**Non testé dans ESO** : le cas réel signalé n'a pas été reproduit dans le
+client. Les défauts de parcours et d'attente sont corrigés et couverts
+par simulation ; cela ne prouve pas lequel explique le blocage observé.
+Les nouveaux messages doivent permettre de préciser le diagnostic en jeu.
+
 ## 2026-11-13 - v0.31 (tri des objets du sac à dos)
 
 - **Champ concerné** : « Sélectionner un objet du sac à dos pour créer

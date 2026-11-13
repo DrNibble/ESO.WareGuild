@@ -717,10 +717,12 @@ function WG.FindDailyItem()
             --White, no Trait, and the Exact Craft Level Required by the Writ
             local Have = 0
             if WG.SV.LazyCraftingProduct then
+              local Recipe = WG.MaterialExcel[CraftType] and WG.MaterialExcel[CraftType][ItemId]
+              Recipe = Recipe and Recipe[MaterialId]
               local Pattern, MaterialIndex = GetSmithingPatternInfoForItemId(ItemId, MaterialId, CraftType)
               local ReferenceLink
-              if Pattern and MaterialIndex then
-                local _, NumPer = unpack(WG.MaterialExcel[CraftType][ItemId][MaterialId])
+              if Pattern and MaterialIndex and Recipe then
+                local _, NumPer = unpack(Recipe)
                 ReferenceLink = GetSmithingPatternResultLink(Pattern, MaterialIndex, NumPer, 1, 1, 0)
               end
               --No Reliable Reference: Keep the Raw Materials Rather Than Guess a Level
@@ -729,42 +731,56 @@ function WG.FindDailyItem()
                 CraftLevel = GetItemLinkRequiredLevel(ReferenceLink)
                 CraftChampionPoints = GetItemLinkRequiredChampionPoints(ReferenceLink)
               end
-              --GetNextGuildBankSlotId Returns nil When the Bank is Empty
-              local StartPoint = GetNextGuildBankSlotId()
-              if StartPoint and CraftLevel ~= nil and CraftChampionPoints ~= nil then
-                for i = StartPoint, StartPoint + 500 do
+              if CraftLevel ~= nil and CraftChampionPoints ~= nil then
+                local SawCandidate = false
+                for i in WG.GuildBankSlots do
                   local ItemLink = GetItemLink(3, i)
-                  if ItemLink ~= "" and Have < Need
-                    and GetItemLinkQuality(ItemLink) == ITEM_QUALITY_NORMAL
-                    and GetItemLinkTraitInfo(ItemLink) == ITEM_TRAIT_TYPE_NONE
-                    and GetItemLinkRequiredLevel(ItemLink) == CraftLevel
-                    and GetItemLinkRequiredChampionPoints(ItemLink) == CraftChampionPoints
-                    and DoesItemLinkFulfillJournalQuestCondition(ItemLink, a, 1, b, GetItemCreatorName(3, i) == GetUnitName("player")) then
-                    local Count = select(2, GetItemInfo(3, i))
-                    AddProduct(GetItemLinkItemId(ItemLink), ItemLink, Count, CraftLevel, CraftChampionPoints)
-                    Have = Have + Count
+                  local Fulfills = ItemLink ~= "" and DoesItemLinkFulfillJournalQuestCondition(
+                    ItemLink, a, 1, b, GetItemCreatorName(3, i) == GetUnitName("player"))
+                  if ItemLink ~= "" and Have < Need and (Fulfills or GetItemLinkItemId(ItemLink) == ItemId) then
+                    SawCandidate = true
+                    local Reason = WG.WithdrawalBlockReason(i)
+                      or WG.WritItemBlockReason(ItemLink, CraftLevel, CraftChampionPoints)
+                    if not Reason and not Fulfills then Reason = WG.Lang.CHAT_WITHDRAW_CONDITION end
+                    if Reason then WG.ReportWithdrawalBlocked(ItemLink, Reason)
+                    else
+                      local Count = select(2, GetItemInfo(3, i))
+                      AddProduct(GetItemLinkItemId(ItemLink), ItemLink, Count, CraftLevel, CraftChampionPoints)
+                      Have = Have + Count
+                    end
                   end
                 end
+                if not SawCandidate then
+                  WG.ReportWithdrawalBlocked(ReferenceLink, WG.Lang.CHAT_WITHDRAW_NOT_FOUND)
+                end
+              else
+                WG.ReportWithdrawalBlocked(ToLink(ItemId), WG.Lang.CHAT_WITHDRAW_REFERENCE)
               end
+            else
+              WG.ReportWithdrawalBlocked(ToLink(ItemId), WG.Lang.CHAT_WITHDRAW_DISABLED)
             end
             --Raw Materials for the Items Still to Craft
             local Missing = Need - Have
             if Missing > 0 then
-              local RawId, NumPer = unpack(WG.MaterialExcel[CraftType][ItemId][MaterialId])
-              SmithM[RawId] = SmithM[RawId] or 0
-              SmithM[RawId] = SmithM[RawId] + (NumPer * Missing)
+              local Recipe = WG.MaterialExcel[CraftType] and WG.MaterialExcel[CraftType][ItemId]
+              Recipe = Recipe and Recipe[MaterialId]
+              if Recipe then
+                local RawId, NumPer = unpack(Recipe)
+                SmithM[RawId] = SmithM[RawId] or 0
+                SmithM[RawId] = SmithM[RawId] + (NumPer * Missing)
+              else
+                WG.ReportWithdrawalBlocked(ToLink(ItemId), WG.Lang.CHAT_WITHDRAW_DATA)
+              end
             end
           end
           --Alchemy and Cook Production
           if Need > 0 and ((CraftType == 4 and MaterialId ~= 0) or CraftType == 5) then
-            --GetNextGuildBankSlotId Returns nil When the Bank is Empty
-            local StartPoint = GetNextGuildBankSlotId()
-            if StartPoint then
-              for i = StartPoint, StartPoint + 500 do
-                local ItemLink = GetItemLink(3, i)
-                if ItemLink ~= "" and DoesItemLinkFulfillJournalQuestCondition(ItemLink, a, 1, b, GetItemCreatorName(3, i) == GetUnitName("player")) then
-                  table.insert(Materials, {["ItemLink"] = ItemLink, ["Count"] = 1})
-                end
+            for i in WG.GuildBankSlots do
+              local ItemLink = GetItemLink(3, i)
+              if ItemLink ~= "" and DoesItemLinkFulfillJournalQuestCondition(ItemLink, a, 1, b, GetItemCreatorName(3, i) == GetUnitName("player")) then
+                local Reason = WG.WithdrawalBlockReason(i)
+                if Reason then WG.ReportWithdrawalBlocked(ItemLink, Reason)
+                else table.insert(Materials, {["ItemLink"] = ItemLink, ["Count"] = 1}) end
               end
             end
           end
@@ -778,13 +794,13 @@ function WG.FindDailyItem()
             --Finished Glyph in the Guild Bank Fulfilling the Writ
             local Have = 0
             if WG.SV.LazyCraftingProduct then
-              --GetNextGuildBankSlotId Returns nil When the Bank is Empty
-              local StartPoint = GetNextGuildBankSlotId()
-              if StartPoint then
-                for i = StartPoint, StartPoint + 500 do
-                  local ItemLink = GetItemLink(3, i)
-                  if ItemLink ~= "" and Have < Need
-                    and DoesItemLinkFulfillJournalQuestCondition(ItemLink, a, 1, b, GetItemCreatorName(3, i) == GetUnitName("player")) then
+              for i in WG.GuildBankSlots do
+                local ItemLink = GetItemLink(3, i)
+                if ItemLink ~= "" and Have < Need
+                  and DoesItemLinkFulfillJournalQuestCondition(ItemLink, a, 1, b, GetItemCreatorName(3, i) == GetUnitName("player")) then
+                  local Reason = WG.WithdrawalBlockReason(i)
+                  if Reason then WG.ReportWithdrawalBlocked(ItemLink, Reason)
+                  else
                     local Count = select(2, GetItemInfo(3, i))
                     AddProduct(GetItemLinkItemId(ItemLink), ItemLink, Count)
                     Have = Have + Count

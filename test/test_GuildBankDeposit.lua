@@ -59,6 +59,9 @@ end
 BAG_BACKPACK = 1
 EVENT_ADD_ON_LOADED = "loaded"
 EVENT_GUILD_BANK_ITEMS_READY = "ready"
+EVENT_GUILD_BANK_SELECTED, EVENT_GUILD_BANK_DESELECTED = "selected", "deselected"
+EVENT_OPEN_GUILD_BANK, EVENT_CLOSE_GUILD_BANK = "open", "close"
+EVENT_GUILD_BANK_OPEN_ERROR = "open-error"
 EVENT_GUILD_BANK_ITEM_ADDED = "added"
 EVENT_GUILD_BANK_ITEM_REMOVED = "removed"
 EVENT_GUILD_BANK_TRANSFER_ERROR = "error"
@@ -70,7 +73,7 @@ SETTING_TYPE_LOOT = "loot"
 ITEMFILTERTYPE_CRAFTING = 99
 ITEMFILTERTYPE_STYLE_MATERIALS, ITEMFILTERTYPE_TRAIT_ITEMS = 98, 97
 ITEM_QUALITY_NORMAL, ITEM_TRAIT_TYPE_NONE = 1, 0
-GetString = function() return "" end
+GetString = function(_, Index) return Index and ("guild bank error " .. tostring(Index)) or "" end
 zo_strformat = function(Text, ...)
   assert(type(Text) == "string", "missing translation")
   local Values = {...}
@@ -101,9 +104,11 @@ GetSlotStackSize = function(BagId, Slot)
   return Item and Item.count or 0, Item and Item.max or 0
 end
 GetItemInfo = function(BagId, Slot) return "", GetSlotStackSize(BagId, Slot) end
-GetNextGuildBankSlotId = function()
+GetNextGuildBankSlotId = function(Previous)
   local First
-  for Slot in pairs(Bank) do if not First or Slot < First then First = Slot end end
+  for Slot in pairs(Bank) do
+    if (Previous == nil or Slot > Previous) and (not First or Slot < First) then First = Slot end
+  end
   return First
 end
 FindFirstEmptySlotInBag = function(BagId)
@@ -206,8 +211,10 @@ assert(loadfile("../WareGuild/lang/en.lua"))()
 assert(loadfile("../WareGuild/Main.lua"))()
 local WG = SDC_WareGuild
 local OriginalAllGuildStep = WG.AllGuildStep
+local BankStateHandlers = Handlers[WG.name .. "_BankState"]
 local function reset()
   Bag, Bank, Handlers, Tasks, Timers, Messages, Operations = {}, {}, {}, {}, {}, {}, {}
+  Handlers[WG.name .. "_BankState"] = BankStateHandlers
   Size, BankSize, Permission, SelectedGuild, BankFirst = 12, 500, true, 42, true
   FailTransfer, LostSpace, OnWithdrawal = false, false, nil
   LockedBag, LockedBank, Settings, EndCount, GuardWaits = {}, {}, "1", 0, 0
@@ -216,6 +223,7 @@ local function reset()
   LastKnowledgeArgs, LastResearchArgs, HasWrit, LibCharacterKnowledge = nil, nil, false, nil
   WG.SV = {KeepCraft = false, Log = false, AutoClose = false}
   WG.CV = {}
+  emit(EVENT_CLOSE_GUILD_BANK)
 end
 local function start(Steps)
   WG.AllGuildStep = function() return Steps end
@@ -422,6 +430,244 @@ for Case = 1, 20 do
   check("matrix " .. Case .. ": exact bank amount", total(3, 30157) == Target)
   check("matrix " .. Case .. ": minimum bank stacks", select(2, total(3, 30157)) == math.ceil(Target / 10))
 end
+
+--Daily withdrawals: early READY, sparse slots, selected guild and useful failures.
+local OriginalJournalInfo, OriginalQuality, OriginalTrait = GetJournalQuestInfo, GetItemLinkQuality, GetItemLinkTraitInfo
+local OriginalGuildName, OriginalTransfer, OriginalMove = GetGuildName, TransferFromGuildBank, CallSecureProtected
+local WantedId, WantQuality, WantTrait, QuestMatches, NoPattern, NoReference, Selections
+GetGuildName = function(Id) return "Guild" .. tostring(Id) end
+GetJournalQuestInfo = function(Index)
+  return nil, nil, nil, nil, nil, nil, nil, nil, nil, Index == 1 and 4 or 0
+end
+GetQuestConditionMasterWritInfo = function() return nil end
+GetQuestConditionItemInfo = function(Index, _, Condition)
+  if Index == 1 and Condition == 1 then return WantedId, 153, 6, 1 end
+  return 0, 0, 0, 0
+end
+GetJournalQuestConditionValues = function(Index, _, Condition)
+  return 0, Index == 1 and Condition == 1 and 1 or 0
+end
+GetSmithingPatternInfoForItemId = function() if not NoPattern then return 99, 2 end end
+GetSmithingPatternResultLink = function()
+  return NoReference and "" or link(item(WantedId, 1, 1, 1, 16))
+end
+GetItemCreatorName, GetUnitName = function() return "tester" end, function() return "tester" end
+GetItemLinkStacks = function(Link) return total(1, GetItemLinkItemId(Link)), 0, 0 end
+DoesItemLinkFulfillJournalQuestCondition = function(Link)
+  return QuestMatches and GetItemLinkItemId(Link) == WantedId
+end
+GetItemLinkQuality = function(Link)
+  return GetItemLinkItemId(Link) == WantedId and WantQuality or 1
+end
+GetItemLinkTraitInfo = function(Link)
+  return GetItemLinkItemId(Link) == WantedId and WantTrait or 0
+end
+SelectGuildBank = function(Id)
+  Selections[#Selections + 1] = Id
+  SelectedGuild = Id
+  emit(EVENT_GUILD_BANK_SELECTED, Id)
+end
+local function dailySetup()
+  reset()
+  WantedId, WantQuality, WantTrait, QuestMatches, NoPattern, NoReference = 43559, 1, 0, true, false, false
+  SelectedGuild, Selections = 44, {}
+  WG.SV.LazyCraftingProduct, WG.SV.LazyCrafting = true, false
+  Bank[2], Bank[2456] = item(999, 1), item(43559, 1, 1, 1, 16)
+end
+local function dailySteps() return {{GuildId = 44, Type = WAREGUILD_DAILY}} end
+local function openDaily(Scene)
+  WG.AllGuildStep = dailySteps
+  WG.GuildBankCore({name = Scene or "guildBank"}, nil, SCENE_SHOWN)
+end
+local function allTimers() for _, Timer in ipairs(Timers) do Timer() end end
+local function messageCount(Text)
+  local Count = 0
+  for _, Message in ipairs(Messages) do if Message:find(Text, 1, true) then Count = Count + 1 end end
+  return Count
+end
+
+dailySetup()
+check("sparse iterator finds staff beyond first slot + 500", WG.FindItem(3, 43559).Total == 1)
+local MaterialList, StaffFound, RawFound = WG.FindDailyItem(), false, false
+for _, Entry in ipairs(MaterialList) do
+  if Entry.ItemId == 43559 then StaffFound = Entry.CraftLevel == 16 and Entry.CraftChampionPoints == 0 end
+  if Entry.ItemId == 533 then RawFound = true end
+end
+check("oak lightning staff fulfills writ at level 16 without requesting oak", StaffFound and not RawFound)
+openDaily()
+check("SCENE_SHOWN before READY waits with a chat message", #Operations == 0 and hasMessage("Waiting for guild bank contents"))
+emit(EVENT_GUILD_BANK_ITEMS_READY)
+drain()
+check("daily withdrawal retrieves staff from sparse slot 2456", total(1, 43559) == 1 and total(3, 43559) == 0)
+check("daily withdrawal restores craft-bag setting", Settings == "1" and EndCount == 1)
+local FinishedOps = #Operations
+emit(EVENT_GUILD_BANK_ITEMS_READY); allTimers()
+check("duplicate READY and stale timers cannot restart finished daily withdrawal", #Operations == FinishedOps and EndCount == 1)
+
+dailySetup(); emit(EVENT_GUILD_BANK_ITEMS_READY); openDaily(); drain()
+check("READY before SCENE_SHOWN starts immediately without waiting again", total(1, 43559) == 1 and not hasMessage("Waiting for guild bank contents"))
+dailySetup(); emit(EVENT_GUILD_BANK_ITEMS_READY); openDaily("gamepad_guild_bank"); drain()
+check("gamepad scene handles READY-before-SHOWN race too", total(1, 43559) == 1 and Settings == "1")
+for _, InvalidateEvent in ipairs({EVENT_OPEN_GUILD_BANK, EVENT_CLOSE_GUILD_BANK,
+  EVENT_GUILD_BANK_SELECTED, EVENT_GUILD_BANK_DESELECTED}) do
+  dailySetup(); emit(EVENT_GUILD_BANK_ITEMS_READY); emit(InvalidateEvent); openDaily()
+  check("bank readiness invalidated by " .. InvalidateEvent, #Operations == 0)
+  emit(EVENT_GUILD_BANK_ITEMS_READY); drain()
+  check("new READY after " .. InvalidateEvent .. " safely resumes", total(1, 43559) == 1)
+end
+dailySetup(); BankFirst = false
+run(dailySteps())
+check("ordinary withdrawal accepts backpack-first events", total(1, 43559) == 1 and total(3, 43559) == 0 and EndCount == 1)
+dailySetup()
+local OriginalItemLink, OriginalRequiredLevel, StaffReads = GetItemLink, GetItemLinkRequiredLevel, 0
+GetItemLink = function(BagId, Slot)
+  local Link = OriginalItemLink(BagId, Slot)
+  if BagId == 3 and Slot == 2456 then
+    StaffReads = StaffReads + 1
+    if StaffReads < 4 then return (Link:gsub("(:43559:30:)16:", "%10:")) end
+  end
+  return Link
+end
+GetItemLinkRequiredLevel = function(Link)
+  if GetItemLinkItemId(Link) == 43559 then return 16 end
+  return OriginalRequiredLevel(Link)
+end
+run(dailySteps())
+check("withdrawal preserves native internal-level link workaround without false changed-item error",
+  StaffReads >= 4 and total(1, 43559) == 1 and not hasMessage("moved or changed"))
+GetItemLink, GetItemLinkRequiredLevel = OriginalItemLink, OriginalRequiredLevel
+
+dailySetup(); SelectedGuild = 42; emit(EVENT_GUILD_BANK_ITEMS_READY); openDaily()
+check("configured third guild selected even when another bank is already ready",
+  #Selections == 1 and Selections[1] == 44 and #Operations == 0)
+SelectedGuild = 99; emit(EVENT_GUILD_BANK_ITEMS_READY)
+check("READY for another guild cannot start a third-guild rule", #Operations == 0)
+SelectedGuild = 44; emit(EVENT_GUILD_BANK_SELECTED, 44); emit(EVENT_GUILD_BANK_ITEMS_READY); drain()
+check("third-guild rule starts only after its own contents are ready", total(1, 43559) == 1 and EndCount == 1)
+
+dailySetup(); openDaily(); allTimers()
+check("missing bank READY times out with guild name and explicit reason",
+  hasMessage("Guild44") and hasMessage("not confirmed after 20 seconds") and #Operations == 0)
+check("bank-ready timeout restores the craft-bag setting", Settings == "1")
+emit(EVENT_GUILD_BANK_ITEMS_READY)
+check("late READY after timeout does not resume an abandoned run", #Operations == 0)
+openDaily(); drain()
+check("a new run works after a bank-ready timeout", total(1, 43559) == 1)
+dailySetup(); openDaily(); emit(EVENT_GUILD_BANK_OPEN_ERROR, 14)
+check("native bank-open error includes guild and server reason", hasMessage("Cannot open guild bank") and hasMessage("guild bank error 14"))
+check("native bank-open error restores settings without a transfer", Settings == "1" and #Operations == 0)
+
+dailySetup(); LockedBank[2456] = true
+run(dailySteps())
+check("FCOIS-protected daily staff is not withdrawn", numOps("take") == 0 and total(3, 43559) == 1)
+check("FCOIS protection is explained with the item and guild", hasMessage("43559") and hasMessage("Guild44") and hasMessage("FCOItemSaver"))
+WG.FindDailyItem(); WG.FindItem(3, 43559)
+check("repeated scans do not spam the same FCOIS reason", messageCount("FCOItemSaver") == 1)
+local ProductsAfterBlock = WG.FindDailyItem()
+local BlockedProduct, FallbackOak = false, false
+for _, Entry in ipairs(ProductsAfterBlock) do
+  if Entry.ItemId == 43559 then BlockedProduct = true end
+  if Entry.ItemId == 533 and Entry.Count == 4 then FallbackOak = true end
+end
+check("blocked staff never substitutes for required raw oak", not BlockedProduct and FallbackOak)
+dailySetup(); PlayerLocked[3][2456] = true; run(dailySteps())
+check("player lock is reported without attempting withdrawal", hasMessage("locked by the player") and numOps("take") == 0)
+dailySetup(); Permission = false; run(dailySteps())
+check("missing withdrawal permission is reported for the daily staff", hasMessage("missing withdrawal permission") and numOps("take") == 0)
+dailySetup(); WantQuality = 2; run(dailySteps())
+check("wrong daily quality is reported", hasMessage("white quality required") and numOps("take") == 0)
+dailySetup(); WantTrait = 1; run(dailySteps())
+check("wrong daily trait is reported", hasMessage("no trait required") and numOps("take") == 0)
+dailySetup(); Bank[2456].level = 24; run(dailySteps())
+check("wrong daily level reports required and found values", hasMessage("expected 16 / CP 0, found 24 / CP 0") and numOps("take") == 0)
+dailySetup(); QuestMatches = false; run(dailySteps())
+check("quest-condition rejection is reported", hasMessage("journal quest condition") and numOps("take") == 0)
+dailySetup(); NoPattern = true; run(dailySteps())
+check("missing smithing pattern reports material fallback", hasMessage("reference craft level unavailable") and numOps("take") == 0)
+dailySetup(); NoReference = true; run(dailySteps())
+check("empty reference link reports material fallback", hasMessage("reference craft level unavailable") and numOps("take") == 0)
+dailySetup(); WantedId = 88888; run(dailySteps())
+check("missing craft mapping is reported without a Lua error", hasMessage("mapping missing") and numOps("take") == 0 and Settings == "1")
+dailySetup(); Bank[2456] = nil; run(dailySteps())
+check("absent finished staff reports which bank was searched", hasMessage("no matching item found in this bank") and hasMessage("Guild44"))
+dailySetup(); WG.SV.LazyCraftingProduct = false; run(dailySteps())
+check("disabled finished-product setting is explained", hasMessage("finished-item retrieval disabled") and numOps("take") == 0)
+
+dailySetup(); FailTransfer = true; run(dailySteps())
+check("native transfer error includes returned error code", hasMessage("transfer error denied") and hasMessage("guild bank error denied"))
+check("failed transfer leaves staff in bank and restores settings", total(3, 43559) == 1 and total(1, 43559) == 0 and Settings == "1")
+dailySetup()
+TransferFromGuildBank = function(Slot) Operations[#Operations + 1] = {"take", Slot} end
+start(dailySteps())
+emit(EVENT_GUILD_BANK_ITEM_REMOVED, 2456, false)
+emit(EVENT_GUILD_BANK_ITEM_REMOVED, 777, true)
+check("other-player and wrong-slot events cannot complete a withdrawal", EndCount == 0 and Settings == 0)
+allTimers()
+check("silently cancelled withdrawal times out with item-specific reason", hasMessage("43559") and hasMessage("no confirmation after 10 seconds") and EndCount == 1)
+check("silent failure does not automatically retry", numOps("take") == 1 and total(3, 43559) == 1 and Settings == "1")
+TransferFromGuildBank = OriginalTransfer
+
+dailySetup()
+TransferFromGuildBank = function(Slot) Operations[#Operations + 1] = {"take", Slot} end
+start(dailySteps())
+local Taken = Bank[2456]; Bank[2456] = nil
+emit(EVENT_GUILD_BANK_ITEM_REMOVED, 2456, true)
+check("bank acknowledgement alone waits for actual backpack receipt", EndCount == 0 and Settings == 0)
+Bag[0] = Taken; emit(EVENT_INVENTORY_SINGLE_SLOT_UPDATE, 1, 0)
+check("actual backpack receipt releases acknowledged withdrawal", EndCount == 1 and Settings == "1")
+TransferFromGuildBank = OriginalTransfer
+
+dailySetup()
+TransferFromGuildBank = function(Slot) Operations[#Operations + 1] = {"take", Slot} end
+start(dailySteps())
+SelectedGuild = 99; emit(EVENT_INVENTORY_SINGLE_SLOT_UPDATE, 1, 0)
+check("bank change during withdrawal has a distinct diagnostic", hasMessage("selected guild bank changed") and Settings == "1")
+TransferFromGuildBank = OriginalTransfer
+
+dailySetup()
+TransferFromGuildBank = function(Slot) Operations[#Operations + 1] = {"take", Slot} end
+start(dailySteps())
+local AbandonedTimers = Timers
+WG.GuildBankCore({name = "guildBank"}, nil, SCENE_HIDING)
+check("closing during a pending withdrawal immediately restores settings", Settings == "1")
+emit(EVENT_CLOSE_GUILD_BANK)
+TransferFromGuildBank = OriginalTransfer
+start(dailySteps()); drain()
+for _, Timer in ipairs(AbandonedTimers) do Timer() end
+check("closed-run timers cannot interrupt a reopened withdrawal",
+  total(1, 43559) == 1 and Settings == "1" and not hasMessage("no confirmation after 10 seconds"))
+
+dailySetup(); Bank[7788] = item(43559, 1, 1, 1, 16)
+OnWithdrawal = function()
+  for Slot, Item in pairs(Bank) do if Item.id == 43559 then LockedBank[Slot] = true end end
+end
+run({{GuildId = 44, Type = WAREGUILD_TAKE_ALL, ItemId = 43559}})
+check("queued withdrawal rechecks newly applied FCOIS protection", numOps("take") == 1 and total(1, 43559) == 1 and total(3, 43559) == 1 and hasMessage("FCOItemSaver"))
+dailySetup(); Bank[7788] = item(43559, 1, 1, 1, 16)
+OnWithdrawal = function()
+  for _, Item in pairs(Bank) do if Item.id == 43559 then Item.id = 888 end end
+end
+run({{GuildId = 44, Type = WAREGUILD_TAKE_ALL, ItemId = 43559}})
+check("queued withdrawal rejects a slot replaced with another item", numOps("take") == 1 and total(3, 888) == 1 and hasMessage("moved or changed"))
+dailySetup(); Bank[7788] = item(43559, 1, 1, 1, 16)
+OnWithdrawal = function() Permission = false end
+run({{GuildId = 44, Type = WAREGUILD_TAKE_ALL, ItemId = 43559}})
+check("queued withdrawal rechecks lost permission", numOps("take") == 1 and total(3, 43559) == 1 and hasMessage("missing withdrawal permission"))
+
+dailySetup(); Bag[0], Bag[1], LockedBag[0] = item(888, 2), item(888, 3), true
+run(dailySteps())
+check("protected unrelated backpack stacks cannot stall a daily withdrawal", total(1, 43559) == 1 and numOps("move") == 0 and EndCount == 1)
+dailySetup(); Bag[0], Bag[1], PlayerLocked[1][0] = item(888, 2), item(888, 3), true
+run(dailySteps())
+check("player-locked backpack stacks are not merged during daily withdrawal", total(1, 43559) == 1 and numOps("move") == 0 and EndCount == 1)
+dailySetup(); Bag[0], Bag[1] = item(888, 2), item(888, 3)
+CallSecureProtected = function() end --Another addon silently blocks a global stack.
+run(dailySteps()); allTimers()
+check("silently cancelled global stack has a timeout and explanation", hasMessage("Stacking") and hasMessage("no confirmation after 10 seconds") and Settings == "1")
+CallSecureProtected = OriginalMove
+
+GetJournalQuestInfo, GetItemLinkQuality, GetItemLinkTraitInfo = OriginalJournalInfo, OriginalQuality, OriginalTrait
+GetGuildName = OriginalGuildName
 
 --LibCharacterKnowledge rule: real filtering, real deposits and actual menu.
 local function entry(Id, State, Account, Remaining)
