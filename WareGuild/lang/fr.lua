@@ -28,6 +28,10 @@ WG.Lang = {
   
   ["CHAT_STORE_TO"] = "Garder <<1>> x <<2>>", -- <<1>> ItemName, <<2>> Quantity
   ["CHAT_STORE_ALL"] = "Déposer tous les <<1>>", -- <<1>> ItemName
+  ["CHAT_STORE_UNKNOWN"] = "Déposer les objets non liés inconnus des autres personnages",
+  ["CHAT_KNOWLEDGE_UNAVAILABLE"] = "Dépôt des connaissances ignoré : LibCharacterKnowledge absent ou incompatible.",
+  ["GUILD_STORE_UNKNOWN"] = "Déposer les objets inconnus de mes autres personnages",
+  ["GUILD_STORE_UNKNOWN_TOOLTIP"] = "Ajouter une règle de dépôt pour cette guilde. Déposer toutes les recettes, plans de mobilier, motifs, grimoires/scripts et équipements à rechercher non liés dont au moins un autre personnage suivi de votre compte, sur le serveur actuel, a besoin. Le personnage actif, les données absentes, les recherches en cours et les objets verrouillés, volés ou protégés sont exclus. Nécessite LibCharacterKnowledge 3.1.0 ou ultérieur. Les réglages de suivi et l'option de désactivation des dépôts pendant les commandes journalières s'appliquent.",
   ["CHAT_STORE_ALL_TYPE"] = "Déposer tous les matériaux <<1>>", -- <<1>> Craft Type
   
   ["CHAT_DAILY_WRITS"] = "Retirer les objets pour les commandes journalières",

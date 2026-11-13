@@ -28,6 +28,10 @@ WG.Lang = {
   
   ["CHAT_STORE_TO"] = "Keep <<1>> x <<2>>", -- <<1>> ItemName, <<2>> Quantity
   ["CHAT_STORE_ALL"] = "Store All <<1>>", -- <<1>> ItemName
+  ["CHAT_STORE_UNKNOWN"] = "Deposit unbound items unknown to other characters",
+  ["CHAT_KNOWLEDGE_UNAVAILABLE"] = "Knowledge deposit skipped: LibCharacterKnowledge is missing or incompatible.",
+  ["GUILD_STORE_UNKNOWN"] = "Deposit items unknown to my other characters",
+  ["GUILD_STORE_UNKNOWN_TOOLTIP"] = "Add a deposit rule for this guild. Deposit all unbound recipes, furnishing plans, motifs, scribing items and researchable equipment needed by at least one other tracked character on your account and current server. The current character, missing data, research in progress, locked, stolen and protected items are excluded. Requires LibCharacterKnowledge 3.1.0 or later. Tracking settings and the disable-storage-while-holding-writs option apply.",
   ["CHAT_STORE_ALL_TYPE"] = "Store All <<1>> Materials", -- <<1>> Craft Type
   
   ["CHAT_DAILY_WRITS"] = "Withdraw Items for Daily Writs",

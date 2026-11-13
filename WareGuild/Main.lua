@@ -3,7 +3,7 @@ local WG = SDC_WareGuild
 WG.name = "WareGuild"
 WG.title = "WareGuild"
 WG.author = "@MelanAster"
-WG.version = "0.29"
+WG.version = "0.30"
 
 --Default Setting
 WG.Default = {
@@ -135,6 +135,7 @@ function WG.ShouldOpenGuildBank()
     if WG.SV.AutoOpen then
       if Type == WAREGUILD_STORE_ALL and WG.FindItem(1, Step[i]["ItemId"], Step[i]["ItemLink"]) then return true end
       if Type < 10 and WG.FindItemType(Type)[1] then return true end
+      if Type == WAREGUILD_STORE_UNKNOWN and WG.FindUnknownCharacterItems()[1] then return true end
     end
   end
   return false
@@ -278,9 +279,34 @@ function WG.FindItemType(CraftType)
   return Slot
 end
 
+--Use the Slot's Real Binding State: Account-Bound and Tradable BoP Are Bound Too.
+local function KnowledgeSlotAllowed(BagId, SlotId)
+  local Link = GetItemLink(BagId, SlotId)
+  return Link ~= "" and IsItemBound(BagId, SlotId) == false
+    and not IsItemPlayerLocked(BagId, SlotId)
+    and not IsItemLinkStolen(Link) and FCOISAllow(BagId, SlotId)
+end
+
+function WG.FindUnknownCharacterItems()
+  local Slots, Cache = {}, {}
+  if not WG.HasCharacterKnowledge() then return Slots end
+  for SlotId = 0, GetBagSize(1) - 1 do
+    if KnowledgeSlotAllowed(1, SlotId) then
+      local Link = GetItemLink(1, SlotId)
+      if Cache[Link] == nil then Cache[Link] = WG.IsUnknownToOtherCharacters(Link) end
+      if Cache[Link] then table.insert(Slots, {BagId = 1, SlotId = SlotId}) end
+    end
+  end
+  return Slots
+end
+
 --Step To String
 function WG.StepToString(Step)
   local Type = Step.Type
+  if Type == WAREGUILD_STORE_UNKNOWN then
+    return "|t25:25:esoui/art/treeicons/gamepad/gp_esoplussub_increasedbankspace.dds|t "
+      .. WG.Lang.CHAT_STORE_UNKNOWN
+  end
   local Craft = {WG.Lang.BLACKSMITH, WG.Lang.CLOTH, WG.Lang.ENCHANT, WG.Lang.ALCHEMY, WG.Lang.COOK, WG.Lang.WOOD, WG.Lang.JEWELRY, WG.Lang.STYLE, WG.Lang.TRAIT}
   if Type < 10 then 
     local String = "|t25:25:esoui/art/treeicons/gamepad/gp_esoplussub_increasedbankspace.dds|t "
@@ -463,7 +489,8 @@ local function DepositSlots(Target, BagId)
   for _, Slot in ipairs(Candidates) do
     local Link = GetItemLink(BagId, Slot.SlotId)
     --FindItem's Legacy Internal-Level Workaround Is Broader Than Stacking.
-    if GetItemLinkQuality(Link) == GetItemLinkQuality(Target.ItemLink)
+    if (not Target.KnowledgeRule or KnowledgeSlotAllowed(BagId, Slot.SlotId))
+      and GetItemLinkQuality(Link) == GetItemLinkQuality(Target.ItemLink)
       and GetItemLinkTraitInfo(Link) == GetItemLinkTraitInfo(Target.ItemLink)
       and GetItemLinkRequiredLevel(Link) == GetItemLinkRequiredLevel(Target.ItemLink)
       and GetItemLinkRequiredChampionPoints(Link) == GetItemLinkRequiredChampionPoints(Target.ItemLink) then
@@ -568,6 +595,14 @@ end
 
 local function BeginDeposit(Target)
   if Target.Started then return end
+  if Target.KnowledgeRule and not WG.IsUnknownToOtherCharacters(Target.ItemLink) then
+    WG.GuildBankQueue(true)
+    return
+  end
+  if Target.KnowledgeRule then
+    Target.Count = math.min(Target.Count, DepositSlots(Target, 1).Total)
+    if Target.Count <= 0 then WG.GuildBankQueue(true) return end
+  end
   Target.Started = true
   Target.GuildId = GetSelectedGuildBankId()
   Target.Remaining = Target.Count
@@ -577,6 +612,7 @@ local function BeginDeposit(Target)
     if BagSlots.Total < Target.Count then StoreDeposit(Target) return end
     if #BankSlots == 0 then StoreDeposit(Target) return end
     local _, Max = GetSlotStackSize(1, BagSlots[1].SlotId)
+    if Max <= 1 then StoreDeposit(Target) return end
     if GetNumBagFreeSlots(1) < WG.GuildBankRegroupSpace(BagSlots, BankSlots, Max, Target.Count) then
       DepositMessage("CHAT_REGROUP_NO_SPACE", Target)
       StoreDeposit(Target)
@@ -611,7 +647,7 @@ function WG.GuildBankCore(scene, _, newstate)
   Step = WG.AllGuildStep()
   if WG.SV.KeepCraft and HaveWrits() then
     for i = 1, #Step do
-      if Step[i]["Type"] < 10 or Step[i]["Type"] == WAREGUILD_STORE_ALL or Step[i]["Type"] == WAREGUILD_STORE_TO then
+      if WG.IsDepositStep(Step[i]["Type"]) then
         Step[i] = "Skip"
       end
     end
@@ -636,7 +672,7 @@ function WG.GuildBankWork(DoRemove)
     --Display Step
     if WG.SV.Log then d("["..GetGuildName(GetSelectedGuildBankId()).."] "..WG.StepToString(Step[1])) end
     --Stack if need
-    if ShouldStack() then
+    if ShouldStack() and Step[1].Type ~= WAREGUILD_STORE_UNKNOWN then
       WG.Stack(function() table.remove(Step, 1) WG.GuildBankWork(false) end)
       return
     else
@@ -664,12 +700,12 @@ function WG.GuildBankWork(DoRemove)
 
   --Try Stack When No Free Slots in Backbag
   if GetNumBagFreeSlots(BAG_BACKPACK) == 0 then
-    if ShouldStack() then
+    if ShouldStack() and Step[1].Type ~= WAREGUILD_STORE_UNKNOWN then
       WG.Stack(function() WG.GuildBankWork(false) end)
       return
     else
       local Type = Step[1].Type
-      if not (Type < 10 or Type == WAREGUILD_STORE_TO or Type == WAREGUILD_STORE_ALL) then
+      if not WG.IsDepositStep(Type) then
         d("[WareGuild] "..WG.Lang.CHAT_STOP)
         d("[WareGuild] "..WG.Lang.CHAT_BACKBAG_FULL)
         Close = false
@@ -694,6 +730,16 @@ function WG.GuildBankWork(DoRemove)
   end
 
 --AnalyzeStep
+  --Unbound Learnable Items Needed by at Least One Other Tracked Character.
+  if bank.Type == WAREGUILD_STORE_UNKNOWN then
+    if not WG.HasCharacterKnowledge() then
+      d("[WareGuild] " .. WG.Lang.CHAT_KNOWLEDGE_UNAVAILABLE)
+    else
+      for _, Slot in ipairs(WG.FindUnknownCharacterItems()) do
+        table.insert(Queue, {Type = WAREGUILD_QUEUE_STORE, SlotId = Slot.SlotId, KnowledgeRule = true})
+      end
+    end
+  end
   --CraftStore
   if bank.Type < 10 then
     local Slot = WG.FindItemType(bank.Type)
@@ -768,7 +814,7 @@ function WG.GuildBankWork(DoRemove)
   end
   
   --ItemStore
-  if bank.Type > 20 and bank.Type < 30 then
+  if bank.Type == WAREGUILD_STORE_TO or bank.Type == WAREGUILD_STORE_ALL then
     local Slot = WG.FindItem(1, bank.ItemId, bank.ItemLink, bank)
     --StoreAll
     if bank.Type == WAREGUILD_STORE_ALL then
@@ -933,6 +979,11 @@ function WG.GuildBankQueue(Event)
   
   --Store
   if Target.Type == WAREGUILD_QUEUE_STORE then
+    if Target.KnowledgeRule and (not KnowledgeSlotAllowed(1, Target.SlotId)
+      or not WG.IsUnknownToOtherCharacters(GetItemLink(1, Target.SlotId))) then
+      WG.GuildBankQueue(true)
+      return
+    end
     --Free slot?
     if GetNumBagFreeSlots(3) == 0 then
       d("[WareGuild] "..WG.Lang.CHAT_STOP)

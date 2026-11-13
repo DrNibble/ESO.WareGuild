@@ -1,5 +1,80 @@
 # CHANGES
 
+## 2026-11-13 - v0.30 (dépôt des objets inconnus des autres personnages via LCK)
+
+### Nouvelle règle
+
+- **Destination par guilde** : bouton « Déposer les objets inconnus de mes
+  autres personnages » dans chacun des cinq sous-menus de banque de guilde.
+  Il ajoute une règle `WAREGUILD_STORE_UNKNOWN` (`Type = 23`) à cette banque
+  uniquement, sans doublon si le bouton est pressé plusieurs fois. Aucun
+  dépôt n'est activé par défaut.
+- **Critère de connaissance** : au moins un autre personnage suivi du même
+  compte, sur le serveur actuel, doit avoir l'état exact
+  `LCK.KNOWLEDGE_UNKNOWN`. Le personnage connecté et les autres comptes
+  importés sont exclus. Les réglages de suivi LCK sont respectés, sans
+  forcer l'inclusion des personnages masqués. Un objet inconnu uniquement
+  du personnage actif ne suffit pas.
+- **Objets concernés** : tous les exemplaires non liés des recettes, plans
+  de mobilier, motifs, grimoires et scripts que LCK reconnaît. Les
+  équipements dotés d'un trait qu'un autre personnage doit encore
+  rechercher sont aussi concernés via les API de recherche dédiées.
+  Une recherche déjà en cours, même arrivée à terme sur un personnage
+  déconnecté, ne réclame pas de nouvel exemplaire.
+- **Absence de données** : `KNOWLEDGE_NODATA`, `KNOWLEDGE_INVALID`, liste
+  vide ou bibliothèque non initialisée ne sont jamais interprétés comme
+  « inconnu ». Les personnages doivent disposer de données enregistrées
+  par LCK pour être pris en compte.
+
+### Intégration et protections
+
+- **Filtrage réel des slots** : `IsItemBound` exclut les objets liés, y
+  compris les objets liés au compte. Sont aussi exclus les objets volés,
+  verrouillés par le joueur et protégés par FCOItemSaver, sauf si l'option
+  existante d'ignorance de FCOItemSaver est activée.
+- **Regroupement et transferts** : les objets empilables réutilisent le
+  regroupement banque/sac de la version 0.29. Les équipements non empilables
+  utilisent la même transaction asynchrone sans retirer les équipements
+  déjà en banque. Le filtre d'éligibilité accompagne la transaction afin
+  de ne pas empiler ou déposer un exemplaire lié de lien identique ; les
+  slots sont revérifiés avant l'exécution.
+- **Règles existantes** : prise en charge de l'ouverture automatique, du
+  libellé dans les étapes, de la copie des règles et du réglage
+  `KeepCraft` qui suspend les dépôts pendant les commandes journalières.
+- **Dépendance optionnelle** : `LibCharacterKnowledge>=301000` est ajouté
+  à `OptionalDependsOn`. Sans bibliothèque compatible, le bouton est
+  désactivé et une règle déjà enregistrée est ignorée avec un message dans
+  le chat ; les autres fonctionnalités de WareGuild restent disponibles.
+- **Langues et version** : libellés et aide en français, anglais et chinois ;
+  version `0.30`, AddOnVersion `20261113`.
+
+### API et tests
+
+Contrat LCK vérifié dans la
+[référence développeur LibCharacterKnowledge](http://eso.code65536.com/addons/libcharacterknowledge/) :
+`GetItemKnowledgeList(itemLink, nil, nil, account)`,
+`GetSmithingResearchFromItemLink` et
+`GetSmithingResearchStatusForCharacters(craft, line, trait, nil, nil, account)`.
+Les états de connaissance ne sont pas des booléens. Le paramètre serveur
+omis désigne le serveur courant, et l'absence de `includedCharIds` préserve
+les exclusions de suivi.
+
+Signatures ESO vérifiées dans la
+[documentation ESOUI live](https://github.com/esoui/esoui/blob/f819c808d57e237707c76e7b52518e2589c9e191/ESOUIDocumentation.txt) :
+`IsItemBound`, `IsItemPlayerLocked`, `GetDisplayName` et
+`GetCurrentCharacterId`.
+
+Compilation des fichiers livrés en Lua 5.1 et **276 assertions hors jeu
+réussies** : 92 tests historiques, 124 tests de dépôt/regroupement et 60
+nouveaux contrôles LCK. Les tests chargent les vrais Data.lua, Main.lua et
+Menu.lua, exécutent les boutons des cinq menus et les transferts différés.
+Ils couvrent notamment le personnage actif, les comptes importés, les
+données absentes, les recherches en cours, les doublons liés, les objets
+protégés, le sac plein, l'absence de bibliothèque et les règles sauvegardées.
+
+**Non testé dans ESO** : les états simulés ne remplacent pas la validation
+avec les données réelles de LibCharacterKnowledge et la banque en jeu.
+
 ## 2026-11-13 - v0.29 (regroupement des piles avant tous les dépôts)
 
 ### Fonctionnement

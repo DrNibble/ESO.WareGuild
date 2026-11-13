@@ -1,11 +1,11 @@
 ## Title: WareGuild
 ## APIVersion: 101051 101052
-## Version: 0.29
+## Version: 0.30
 ## AddOnVersion: 20261113
 ## Author: @Altorus13 DrNibble
 ## Description: Item Management Addon for Guild Banks.
 ## DependsOn: LibAddonMenu-2.0
-## OptionalDependsOn: LibLazyCrafting FCOItemSaver
+## OptionalDependsOn: LibLazyCrafting FCOItemSaver LibCharacterKnowledge>=301000
 ## SavedVariables: WareGuild_SaveVars
 
 # This Add-on is not created by, affiliated with or sponsored by ZeniMax Media Inc. or its affiliates. 

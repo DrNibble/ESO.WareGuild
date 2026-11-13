@@ -9,6 +9,24 @@ local GuildFuzzy1, GuildFuzzy2, GuildFuzzy3, GuildFuzzy4, GuildFuzzy5 = false, f
 local GuildS1A, GuildS1B, GuildS2A, GuildS2B, GuildS3A, GuildS3B, GuildS4A, GuildS4B, GuildS5A, GuildS5B = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 local GuildS1C, GuildS2C, GuildS3C, GuildS4C, GuildS5C = 1, 1, 1, 1, 1
 local ClipGuild, ClipSteps = false, {}
+local function KnowledgeDepositButton(GuildIndex)
+  return {
+    type = "button",
+    name = WG.Lang.GUILD_STORE_UNKNOWN,
+    tooltip = WG.Lang.GUILD_STORE_UNKNOWN_TOOLTIP,
+    disabled = function() return not WG.HasCharacterKnowledge() end,
+    func = function()
+      local GuildId = WG.SV.Guild[GuildIndex]
+      if not GuildId or not WG.HasCharacterKnowledge() then return end
+      local Rules = WG.SV["Guild" .. GuildIndex]
+      for _, Rule in ipairs(Rules) do
+        if Rule.Type == WAREGUILD_STORE_UNKNOWN then return end
+      end
+      table.insert(Rules, {GuildId = GuildId, Type = WAREGUILD_STORE_UNKNOWN})
+    end,
+    width = "full",
+  }
+end
 local MaterialChoices = {
   "/", 
   WG.Lang.BLACKSMITH, 
@@ -319,6 +337,7 @@ function WG.BuildMenu()
 		name = function() return GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 1 > "..GetGuildName(WG.SV.Guild[1] or 0) end,
     disabled = function() if WG.SV.Guild[1] then return false else return true end end,
 		controls = {
+        KnowledgeDepositButton(1),
         { --Item Scroll
         type = "dropdown",
         name = WG.Lang.GUILD_ITEM_SCROLL, 
@@ -507,6 +526,7 @@ function WG.BuildMenu()
 		name = function() return GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 2 > "..GetGuildName(WG.SV.Guild[2] or 0) end,
     disabled = function() if WG.SV.Guild[2] then return false else return true end end,
 		controls = {
+        KnowledgeDepositButton(2),
         { --Item Scroll
         type = "dropdown",
         name = WG.Lang.GUILD_ITEM_SCROLL, 
@@ -695,6 +715,7 @@ function WG.BuildMenu()
 		name = function() return GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 3 > "..GetGuildName(WG.SV.Guild[3] or 0) end,
     disabled = function() if WG.SV.Guild[3] then return false else return true end end,
 		controls = {
+        KnowledgeDepositButton(3),
         { --Item Scroll
         type = "dropdown",
         name = WG.Lang.GUILD_ITEM_SCROLL,
@@ -883,6 +904,7 @@ function WG.BuildMenu()
 		name = function() return GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 4 > "..GetGuildName(WG.SV.Guild[4] or 0) end,
     disabled = function() if WG.SV.Guild[4] then return false else return true end end,
 		controls = {
+        KnowledgeDepositButton(4),
         { --Item Scroll
         type = "dropdown",
         name = WG.Lang.GUILD_ITEM_SCROLL, 
@@ -1071,6 +1093,7 @@ function WG.BuildMenu()
 		name = function() return GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 5 > "..GetGuildName(WG.SV.Guild[5] or 0) end,
     disabled = function() if WG.SV.Guild[5] then return false else return true end end,
 		controls = {
+        KnowledgeDepositButton(5),
         { --Item Scroll
         type = "dropdown",
         name = WG.Lang.GUILD_ITEM_SCROLL, 

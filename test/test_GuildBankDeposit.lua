@@ -10,6 +10,8 @@ local Bag, Bank, Handlers, Tasks, Timers, Messages, Operations
 local Size, BankSize, Permission, SelectedGuild, BankFirst, FailTransfer
 local LockedBag, LockedBank, LostSpace, Settings, OnWithdrawal
 local EndCount, GuardWaits
+local Bound, PlayerLocked, StolenItems, Knowledge, ResearchItems, ResearchKnowledge, HasWrit
+local KnowledgeCalls, LastKnowledgeArgs, LastResearchArgs
 local function item(Id, Count, Max, Variant, Level)
   return {id = Id, count = Count, max = Max or 200, variant = Variant or 1, level = Level or 1}
 end
@@ -116,7 +118,11 @@ GetNumBagFreeSlots = function(BagId)
   for _ in pairs(contents(BagId)) do Used = Used + 1 end
   return GetBagSize(BagId) - Used
 end
-IsItemLinkStolen = function() return false end
+IsItemLinkStolen = function(Link) return StolenItems[GetItemLinkItemId(Link)] == true end
+IsItemBound = function(BagId, Slot) return Bound[BagId][Slot] == true end
+IsItemPlayerLocked = function(BagId, Slot) return PlayerLocked[BagId][Slot] == true end
+GetDisplayName = function() return "@tester" end
+GetCurrentCharacterId = function() return "self" end
 GetItemLinkCraftingSkillType = function() return 4 end
 GetItemLinkFilterTypeInfo = function(Link)
   if Link ~= "" then return ITEMFILTERTYPE_CRAFTING, nil end
@@ -128,7 +134,7 @@ FCOIS = {
 DoesPlayerHaveGuildPermission = function() return Permission end
 GetSelectedGuildBankId = function() return SelectedGuild end
 GetGuildName = function() return "Guild" end
-GetJournalQuestInfo = function() return nil, nil, nil, nil, nil, nil, nil, nil, nil, 0 end
+GetJournalQuestInfo = function() return nil, nil, nil, nil, nil, nil, nil, nil, nil, HasWrit and 4 or 0 end
 GetSetting = function() return Settings end
 SetSetting = function(_, _, Value) Settings = Value end
 ClearCursor = function() end
@@ -199,11 +205,15 @@ assert(loadfile("../WareGuild/Data.lua"))()
 assert(loadfile("../WareGuild/lang/en.lua"))()
 assert(loadfile("../WareGuild/Main.lua"))()
 local WG = SDC_WareGuild
+local OriginalAllGuildStep = WG.AllGuildStep
 local function reset()
   Bag, Bank, Handlers, Tasks, Timers, Messages, Operations = {}, {}, {}, {}, {}, {}, {}
   Size, BankSize, Permission, SelectedGuild, BankFirst = 12, 500, true, 42, true
   FailTransfer, LostSpace, OnWithdrawal = false, false, nil
   LockedBag, LockedBank, Settings, EndCount, GuardWaits = {}, {}, "1", 0, 0
+  Bound, PlayerLocked, StolenItems = {[1] = {}, [3] = {}}, {[1] = {}, [3] = {}}, {}
+  Knowledge, ResearchItems, ResearchKnowledge, KnowledgeCalls = {}, {}, {}, {}
+  LastKnowledgeArgs, LastResearchArgs, HasWrit, LibCharacterKnowledge = nil, nil, false, nil
   WG.SV = {KeepCraft = false, Log = false, AutoClose = false}
   WG.CV = {}
 end
@@ -413,5 +423,216 @@ for Case = 1, 20 do
   check("matrix " .. Case .. ": minimum bank stacks", select(2, total(3, 30157)) == math.ceil(Target / 10))
 end
 
-print(string.format("deposit passed=%d failed=%d", Passed, Failed))
+--LibCharacterKnowledge rule: real filtering, real deposits and actual menu.
+local function entry(Id, State, Account, Remaining)
+  return {id = Id, knowledge = State, account = Account or "@tester", remaining = Remaining}
+end
+local function installLCK()
+  LibCharacterKnowledge = {
+    KNOWLEDGE_INVALID = -1, KNOWLEDGE_NODATA = 0, KNOWLEDGE_KNOWN = 1, KNOWLEDGE_UNKNOWN = 2,
+    GetItemKnowledgeList = function(Link, Server, Included, Account)
+      local Id = GetItemLinkItemId(Link)
+      KnowledgeCalls[Id] = (KnowledgeCalls[Id] or 0) + 1
+      LastKnowledgeArgs = {server = Server, included = Included, account = Account}
+      return Knowledge[Id]
+    end,
+    GetSmithingResearchFromItemLink = function(Link)
+      local Research = ResearchItems[GetItemLinkItemId(Link)]
+      if Research then return unpack(Research) end
+    end,
+    GetSmithingResearchStatusForCharacters = function(Craft, Line, Trait, Server, Included, Account)
+      LastResearchArgs = {craft = Craft, line = Line, trait = Trait,
+        server = Server, included = Included, account = Account}
+      return ResearchKnowledge[Line]
+    end,
+  }
+end
+local function unknownRule() return {{GuildId = 42, Type = WAREGUILD_STORE_UNKNOWN}} end
+local function needsRecipe(Id) Knowledge[Id] = {entry("alt", 2)} end
+local function isNeeded(Id) return WG.IsUnknownToOtherCharacters(link(item(Id, 1))) end
+
+reset()
+check("LCK missing: availability false", not WG.HasCharacterKnowledge())
+check("LCK missing: no eligible items", #WG.FindUnknownCharacterItems() == 0)
+check("LCK missing: unknown predicate is false", not isNeeded(30157))
+installLCK()
+needsRecipe(30157)
+check("LCK loaded: availability true", WG.HasCharacterKnowledge())
+check("unknown to one alt qualifies", isNeeded(30157))
+check("queries default server without tracking overrides",
+  LastKnowledgeArgs.server == nil and LastKnowledgeArgs.included == nil)
+check("queries restrict to current account", LastKnowledgeArgs.account == "@tester")
+
+Knowledge[30157] = {entry("self", 2), entry("alt", 1)}
+check("unknown only to current character is excluded", not isNeeded(30157))
+Knowledge[30157] = {entry("alt", 1), entry("alt2", 2)}
+check("not necessary for every alt to be unknown", isNeeded(30157))
+Knowledge[30157] = {entry("alt", 1), entry("alt2", 1)}
+check("known by all alts is excluded", not isNeeded(30157))
+Knowledge[30157] = {entry("alt", 0), entry("alt2", -1)}
+check("NODATA and INVALID are not unknown", not isNeeded(30157))
+Knowledge[30157] = {entry("foreign", 2, "@someoneelse")}
+check("foreign imported account is excluded defensively", not isNeeded(30157))
+Knowledge[30157] = {entry("alt", 2, "@TESTER")}
+check("account comparison is case insensitive", isNeeded(30157))
+Knowledge[30157] = {entry(nil, 2)}
+check("missing character id cannot qualify", not isNeeded(30157))
+Knowledge[30157] = {}
+check("empty tracked-character list cannot qualify", not isNeeded(30157))
+Knowledge[30157] = nil
+check("library not initialized returning nil is safe", not isNeeded(30157))
+LibCharacterKnowledge.KNOWLEDGE_UNKNOWN = nil
+check("incompatible library cannot classify nil as unknown", not WG.HasCharacterKnowledge() and not isNeeded(30157))
+
+reset(); installLCK()
+ResearchItems[20001] = {1, 3, 2}
+ResearchKnowledge[3] = {entry("alt", 2)}
+check("equipment needed for alt research qualifies", isNeeded(20001))
+check("research API receives the correct indices",
+  LastResearchArgs.craft == 1 and LastResearchArgs.line == 3 and LastResearchArgs.trait == 2)
+check("research query filters same account and current server",
+  LastResearchArgs.account == "@tester" and LastResearchArgs.server == nil and LastResearchArgs.included == nil)
+ResearchKnowledge[3] = {entry("alt", 2, nil, 300)}
+check("research already in progress is excluded", not isNeeded(20001))
+ResearchKnowledge[3] = {entry("alt", 2, nil, 0)}
+check("pending-completed research is excluded", not isNeeded(20001))
+ResearchKnowledge[3] = {entry("alt", 2, nil, -10)}
+check("expired research on an offline alt is excluded", not isNeeded(20001))
+ResearchKnowledge[3] = {entry("self", 2), entry("foreign", 2, "@someoneelse")}
+check("research excludes current character and other accounts", not isNeeded(20001))
+ResearchKnowledge[3] = {entry("alt", 0)}
+check("research without data is excluded", not isNeeded(20001))
+ResearchKnowledge[3] = {entry("alt", 1)}
+check("known research is excluded", not isNeeded(20001))
+ResearchKnowledge[3] = {entry("alt", 2)}
+LibCharacterKnowledge.GetSmithingResearchFromItemLink = nil
+check("missing optional research API does not guess", not isNeeded(20001))
+
+reset(); installLCK(); needsRecipe(30157)
+Bag[0], Bag[1], Bag[2] = item(30157, 25), item(30157, 3), item(30157, 2)
+Bound[1][1], PlayerLocked[1][2] = true, true
+Bag[3], Knowledge[10003] = item(10003, 5), {entry("alt", 1)}
+Bag[4], Knowledge[10004] = item(10004, 5), {entry("self", 2)}
+Bag[5], Knowledge[10005] = item(10005, 5), {entry("foreign", 2, "@someoneelse")}
+Bag[6], ResearchItems[20001], ResearchKnowledge[3] = item(20001, 1, 1), {1, 3, 2}, {entry("alt", 2)}
+Bag[7] = item(777, 5)
+Bag[8] = item(10008, 5); needsRecipe(10008); StolenItems[10008] = true
+Bag[9] = item(10009, 5); needsRecipe(10009); LockedBag[9] = true
+Bag[10], Knowledge[10010] = item(10010, 5), {entry("alt", 0)}
+Bag[11] = item(30157, 4)
+local Eligible, SlotSet = WG.FindUnknownCharacterItems(), {}
+for _, Slot in ipairs(Eligible) do SlotSet[Slot.SlotId] = true end
+check("scan finds only eligible unbound recipes and research gear", #Eligible == 3 and SlotSet[0] and SlotSet[6] and SlotSet[11])
+check("scan excludes bound and player-locked copies of the same link", not SlotSet[1] and not SlotSet[2])
+check("scan excludes stolen and FCOIS-protected items", not SlotSet[8] and not SlotSet[9])
+check("scan excludes known, self-only, foreign, unsupported and missing data",
+  not SlotSet[3] and not SlotSet[4] and not SlotSet[5] and not SlotSet[7] and not SlotSet[10])
+check("scan caches knowledge per link", KnowledgeCalls[30157] == 1)
+
+reset(); installLCK(); needsRecipe(30157); example()
+Bag[1] = item(30157, 7); Bound[1][1] = true
+run(unknownRule())
+check("knowledge deposit keeps bound duplicate in bag", Bag[1] and Bag[1].count == 7)
+check("knowledge deposit regroups all unbound copies in bank", total(3, 30157) == 30 and select(2, total(3, 30157)) == 1)
+check("knowledge deposit preserves all 37 items", total(1, 30157) + total(3, 30157) == 37)
+
+reset(); installLCK()
+Bag[0], ResearchItems[20001], ResearchKnowledge[3] = item(20001, 1, 1), {1, 3, 2}, {entry("alt", 2)}
+Bank[4] = item(20001, 1, 1)
+run(unknownRule())
+check("research gear deposits asynchronously without borrowing existing gear",
+  numOps("take") == 0 and numOps("store") == 1 and total(3, 20001) == 2)
+check("research gear: no residual backpack copy", total(1, 20001) == 0)
+
+reset(); installLCK(); needsRecipe(30157)
+Bag[0], Bag[1], Bank[4] = item(30157, 2), item(20001, 1, 1), item(30157, 2)
+ResearchItems[20001], ResearchKnowledge[3] = {1, 3, 2}, {entry("alt", 2)}
+OnWithdrawal = function() Bound[1][1] = true end
+run(unknownRule())
+check("binding state rechecked before later queued gear deposit", total(1, 20001) == 1 and total(3, 20001) == 0)
+check("binding change does not block other eligible deposit", total(3, 30157) == 4 and EndCount == 1)
+
+reset(); installLCK(); needsRecipe(30157)
+Bag[0], Bag[1], Bank[4] = item(30157, 2), item(20001, 1, 1), item(30157, 2)
+ResearchItems[20001], ResearchKnowledge[3] = {1, 3, 2}, {entry("alt", 2)}
+OnWithdrawal = function() ResearchKnowledge[3] = {entry("alt", 1)} end
+run(unknownRule())
+check("knowledge rechecked before later queued gear deposit", total(1, 20001) == 1 and total(3, 20001) == 0)
+check("learning change safely completes other eligible deposit", total(3, 30157) == 4 and EndCount == 1)
+
+reset(); installLCK(); needsRecipe(30157)
+Bag[0], Bag[1], Bag[2], Bank[4] =
+  item(30157, 2), item(20001, 1, 1), item(20001, 1, 1), item(30157, 2)
+ResearchItems[20001], ResearchKnowledge[3] = {1, 3, 2}, {entry("alt", 2)}
+OnWithdrawal = function() Bound[1][1] = true end
+run(unknownRule())
+check("partially bound queued group clips its deposit to eligible copies",
+  total(1, 20001) == 1 and total(3, 20001) == 1 and Bag[1] ~= nil)
+check("partially bound queued group completes without timeout", EndCount == 1 and not hasMessage("Transfer interrupted"))
+
+reset(); installLCK(); needsRecipe(30157); Size = 2
+Bag[0], Bag[1], Bound[1][1] = item(30157, 25), item(30157, 7), true
+Bank[4] = item(30157, 2)
+run(unknownRule())
+check("full backpack: bound and unbound copies are not globally merged", total(1, 30157) == 7 and total(3, 30157) == 27)
+check("full backpack: knowledge rule uses normal-deposit fallback", numOps("take") == 0 and hasMessage("insufficient backpack space"))
+
+reset(); example()
+run(unknownRule())
+check("saved knowledge rule with LCK missing performs no transfers", #Operations == 0)
+check("saved knowledge rule with LCK missing reports why", hasMessage("LibCharacterKnowledge"))
+reset(); installLCK(); needsRecipe(30157); example(); HasWrit = true; WG.SV.KeepCraft = true
+run(unknownRule())
+check("knowledge rule respects disable-storage-while-holding-writs", #Operations == 0)
+
+reset(); installLCK(); needsRecipe(30157); Bag[0] = item(30157, 1)
+WG.AllGuildStep = unknownRule
+WG.SV.AutoOpen = true
+check("auto-open detects eligible knowledge item", WG.ShouldOpenGuildBank())
+Knowledge[30157] = {entry("alt", 1)}
+check("auto-open does not trigger for all-known items", not WG.ShouldOpenGuildBank())
+LibCharacterKnowledge = nil
+check("auto-open safely ignores unavailable library", not WG.ShouldOpenGuildBank())
+check("step description identifies the new rule", WG.StepToString(unknownRule()[1]):find(WG.Lang.CHAT_STORE_UNKNOWN, 1, true) ~= nil)
+
+--Build the actual LibAddonMenu options and invoke the real buttons.
+reset(); installLCK()
+WG.SV.Guild = {}
+for Index = 1, 5 do WG.SV.Guild[Index] = 41 + Index; WG.SV["Guild" .. Index] = {} end
+local Options
+LibAddonMenu2 = {
+  RegisterAddonPanel = function() end,
+  RegisterOptionControls = function(_, _, Controls) Options = Controls end,
+}
+GetGuildId = function(Index) return 41 + Index end
+assert(loadfile("../WareGuild/Menu.lua"))()
+WG.BuildMenu()
+local Buttons = {}
+for _, Option in ipairs(Options) do
+  if Option.controls then
+    for _, Control in ipairs(Option.controls) do
+      if Control.name == WG.Lang.GUILD_STORE_UNKNOWN then table.insert(Buttons, Control) end
+    end
+  end
+end
+check("menu exposes one knowledge button per configured guild", #Buttons == 5)
+check("menu button enabled with library", not Buttons[3].disabled())
+Buttons[3].func()
+check("menu creates rule in selected guild only", #WG.SV.Guild3 == 1 and WG.SV.Guild3[1].GuildId == 44
+  and WG.SV.Guild3[1].Type == WAREGUILD_STORE_UNKNOWN and #WG.SV.Guild1 == 0)
+Buttons[3].func()
+check("menu does not create duplicate knowledge rules", #WG.SV.Guild3 == 1)
+WG.SV.Guild[4] = false
+Buttons[4].func()
+check("menu refuses a rule without a destination guild", #WG.SV.Guild4 == 0)
+LibCharacterKnowledge = nil
+check("menu button disabled without library", Buttons[2].disabled())
+Buttons[2].func()
+check("disabled menu function cannot add rule", #WG.SV.Guild2 == 0)
+WG.AllGuildStep = OriginalAllGuildStep
+local SavedSteps = WG.AllGuildStep()
+check("saved knowledge rule survives ordinary rule flattening", #SavedSteps == 1
+  and SavedSteps[1].Type == WAREGUILD_STORE_UNKNOWN and SavedSteps[1].GuildId == 44)
+
+print(string.format("deposit and knowledge passed=%d failed=%d", Passed, Failed))
 if Failed > 0 then os.exit(1) end

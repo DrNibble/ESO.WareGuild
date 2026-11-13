@@ -9,6 +9,48 @@ WAREGUILD_DAILY = 31
 --StepType_STORE
 WAREGUILD_STORE_TO = 21
 WAREGUILD_STORE_ALL = 22
+WAREGUILD_STORE_UNKNOWN = 23
+
+function WG.IsDepositStep(Type)
+  return Type < 10 or Type == WAREGUILD_STORE_TO
+    or Type == WAREGUILD_STORE_ALL or Type == WAREGUILD_STORE_UNKNOWN
+end
+
+function WG.HasCharacterKnowledge()
+  local LCK = LibCharacterKnowledge
+  return type(LCK) == "table" and type(LCK.GetItemKnowledgeList) == "function"
+    and LCK.KNOWLEDGE_UNKNOWN ~= nil
+end
+
+--At Least One Tracked Alt on This Account/Server Must Actually Need the Item.
+--NODATA/INVALID Never Count as UNKNOWN, and the Current Character Is Excluded.
+function WG.IsUnknownToOtherCharacters(ItemLink)
+  if not WG.HasCharacterKnowledge() then return false end
+  local LCK, Account, CurrentId = LibCharacterKnowledge, GetDisplayName(), GetCurrentCharacterId()
+  local function Needed(Entries, IsResearch)
+    if type(Entries) ~= "table" then return false end
+    for _, Entry in ipairs(Entries) do
+      if Entry.id and tostring(Entry.id) ~= tostring(CurrentId)
+        and type(Entry.account) == "string" and string.lower(Entry.account) == string.lower(Account)
+        and Entry.knowledge == LCK.KNOWLEDGE_UNKNOWN
+        and (not IsResearch or Entry.remaining == nil) then
+        return true
+      end
+    end
+    return false
+  end
+  --nil Server Means the Current Server; Account Filter Excludes Imported Accounts.
+  if Needed(LCK.GetItemKnowledgeList(ItemLink, nil, nil, Account), false) then return true end
+  --Equipment Research Uses a Separate API, Not GetItemKnowledgeList.
+  if type(LCK.GetSmithingResearchFromItemLink) == "function"
+    and type(LCK.GetSmithingResearchStatusForCharacters) == "function" then
+    local Craft, Line, Trait = LCK.GetSmithingResearchFromItemLink(ItemLink)
+    if Craft and Line and Trait then
+      return Needed(LCK.GetSmithingResearchStatusForCharacters(Craft, Line, Trait, nil, nil, Account), true)
+    end
+  end
+  return false
+end
 --Materials
 WAREGUILD_STORE_B = 1 --BlackSmith
 WAREGUILD_STORE_C = 2 --Clothing
@@ -36,10 +78,11 @@ function WG.PlanGuildBankDeposits(Queue)
     elseif Entry.Type == WAREGUILD_QUEUE_STORE then
       local Link = GetItemLink(1, Entry.SlotId)
       local Count, Max = GetSlotStackSize(1, Entry.SlotId)
-      if Link ~= "" and Max > 1 then
+      if Link ~= "" and (Max > 1 or Entry.KnowledgeRule) then
         local Group = Groups[Link]
         if not Group then
-          Group = {Type = WAREGUILD_QUEUE_DEPOSIT, ItemLink = Link, Count = 0}
+          Group = {Type = WAREGUILD_QUEUE_DEPOSIT, ItemLink = Link, Count = 0,
+            KnowledgeRule = Entry.KnowledgeRule}
           Groups[Link] = Group
           table.insert(Planned, Group)
         end

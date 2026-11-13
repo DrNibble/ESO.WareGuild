@@ -28,6 +28,10 @@ WG.Lang = {
   
   ["CHAT_STORE_TO"] = "使银行中 <<1>> 数量为 <<2>>", -- <<1>> ItemName, <<2>> Quantity
   ["CHAT_STORE_ALL"] = "存储所有 <<1>>", -- <<1>> ItemName
+  ["CHAT_STORE_UNKNOWN"] = "存入其他角色尚未学会的未绑定物品",
+  ["CHAT_KNOWLEDGE_UNAVAILABLE"] = "跳过知识物品存入：LibCharacterKnowledge 未安装或不兼容。",
+  ["GUILD_STORE_UNKNOWN"] = "存入我的其他角色尚未学会的物品",
+  ["GUILD_STORE_UNKNOWN_TOOLTIP"] = "为此公会添加规则。存入本账号当前服务器至少一个其他已追踪角色需要的未绑定配方、家具图纸、样式书、篆刻物品和可研究装备。不包括当前角色、无数据、正在研究的特性以及锁定、被盗或受保护的物品。需要 LibCharacterKnowledge 3.1.0 或更新版本。遵循角色追踪和持有日常委托时禁用存入的设置。",
   ["CHAT_STORE_ALL_TYPE"] = "存储所有 <<1>> 材料", -- <<1>> Craft Type
   
   ["CHAT_DAILY_WRITS"] = "尝试取出 日常制造 材料/物品",
