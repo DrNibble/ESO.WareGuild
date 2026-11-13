@@ -1,5 +1,40 @@
 # CHANGES
 
+## 2026-11-13 - v0.33 (objets finis des commandes journalières sans établi)
+
+**Problème** : à la banque de guilde, le chat affichait pour chaque guilde
+« Retrait impossible de [Bâton de rétablissement] / [Bouclier] : niveau de
+craft de référence indisponible ; recherche des matériaux à la place », et les
+objets finis n'étaient jamais retirés. Les données de patron
+(`GetSmithingPatternInfoForItemId` / `GetSmithingPatternResultLink`) ne sont
+utilisées par l'interface du jeu qu'à un établi d'artisanat
+([craftadvisor_manager.lua](https://github.com/esoui/esoui/blob/live/esoui/ingame/crafting/craftadvisor_manager.lua)) ;
+l'hypothèse est qu'à la banque aucun lien de référence n'est disponible, donc
+aucun niveau.
+
+- **Repli sans niveau** : quand le lien de référence est vide ou que le patron
+  est absent, le niveau exact n'est plus comparé et n'empêche plus le retrait.
+  Le niveau n'est jamais deviné. Restent obligatoires : qualité blanche, aucun
+  trait, retrait autorisé, et acceptation par la condition du journal de quêtes
+  (`DoesItemLinkFulfillJournalQuestCondition`). Quand le niveau est connu (lien
+  de référence disponible), le comportement v0.28 est inchangé : niveau et PC
+  exacts.
+- **Filtre de retrait** : nouvel indicateur `WritProduct` porté par l'étape
+  banque/sac. La qualité blanche et l'absence de trait restent donc contrôlées
+  dans `WG.FindItem` même sans niveau (auparavant, ce filtre n'existait que
+  si un niveau était connu).
+- **Message** : la ligne n'est plus formulée comme un blocage (« Retrait
+  impossible ») mais comme une note : niveau de référence indisponible hors
+  établi, niveau exact non comparé. Dédupliquée comme les autres messages.
+- **Tests** : les deux tests « patron absent / lien vide → matériaux » sont
+  remplacés par des tests de retrait sans niveau (qualité, trait, condition du
+  journal, filtre du sac et de la banque).
+
+**Limite** : le contrôle du niveau exact (v0.28) est perdu tant que le joueur
+n'est pas à un établi ; un objet de bon palier mais de niveau différent que la
+condition du journal accepterait quand même pourrait être retiré. **Non testé
+dans ESO** : validation hors jeu uniquement (Lua 5.1, harnais simulé).
+
 ## 2026-11-13 - v0.32 (diagnostic et fiabilisation des retraits)
 
 - **Messages de blocage** : nom de guilde, lien d'objet et motif pour

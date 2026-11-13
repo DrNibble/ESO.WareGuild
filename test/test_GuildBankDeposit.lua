@@ -583,9 +583,16 @@ check("wrong daily level reports required and found values", hasMessage("expecte
 dailySetup(); QuestMatches = false; run(dailySteps())
 check("quest-condition rejection is reported", hasMessage("journal quest condition") and numOps("take") == 0)
 dailySetup(); NoPattern = true; run(dailySteps())
-check("missing smithing pattern reports material fallback", hasMessage("reference craft level unavailable") and numOps("take") == 0)
+check("missing smithing pattern still withdraws the finished staff and says why",
+  hasMessage("reference craft level unavailable") and numOps("take") == 1 and total(1, 43559) == 1)
+check("missing-reference note is not worded as a blocked withdrawal", not hasMessage("Cannot withdraw"))
 dailySetup(); NoReference = true; run(dailySteps())
-check("empty reference link reports material fallback", hasMessage("reference craft level unavailable") and numOps("take") == 0)
+check("empty reference link still withdraws the finished staff",
+  hasMessage("reference craft level unavailable") and numOps("take") == 1 and total(1, 43559) == 1)
+dailySetup(); NoReference = true; WantQuality = 2; run(dailySteps())
+check("without reference a non-white staff is still refused", hasMessage("white quality required") and numOps("take") == 0)
+dailySetup(); NoReference = true; QuestMatches = false; run(dailySteps())
+check("without reference the journal condition still decides", hasMessage("journal quest condition") and numOps("take") == 0)
 dailySetup(); WantedId = 88888; run(dailySteps())
 check("missing craft mapping is reported without a Lua error", hasMessage("mapping missing") and numOps("take") == 0 and Settings == "1")
 dailySetup(); Bank[2456] = nil; run(dailySteps())

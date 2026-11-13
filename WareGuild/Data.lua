@@ -684,7 +684,7 @@ function WG.FindDailyItem()
   --Finished Products (Sword, Helmet, Staff, Shield, Glyph, Potion, Food...)
   --[ItemId] = {["ItemLink"], ["Count"] (Units Claimed From the Guild Bank)}
   local Products = {}
-  local function AddProduct(ItemId, ItemLink, Count, CraftLevel, CraftChampionPoints)
+  local function AddProduct(ItemId, ItemLink, Count, CraftLevel, CraftChampionPoints, WritProduct)
     if not ItemId or ItemId == 0 or not Count or Count <= 0 then return end
     local Old = Products[ItemId]
     if Old then
@@ -695,6 +695,7 @@ function WG.FindDailyItem()
       Products[ItemId] = {
         ["ItemLink"] = ItemLink, ["Count"] = Count,
         ["CraftLevel"] = CraftLevel, ["CraftChampionPoints"] = CraftChampionPoints,
+        ["WritProduct"] = WritProduct,
       }
     end
   end
@@ -725,13 +726,19 @@ function WG.FindDailyItem()
                 local _, NumPer = unpack(Recipe)
                 ReferenceLink = GetSmithingPatternResultLink(Pattern, MaterialIndex, NumPer, 1, 1, 0)
               end
-              --No Reliable Reference: Keep the Raw Materials Rather Than Guess a Level
+              --The Pattern List Only Exists at a Crafting Station: at the Guild Bank the Reference
+              --Link is Empty. The Level is Never Guessed: Without it the Exact Level is Not Compared,
+              --and the Journal Condition (Tier of the Writ Material), Quality and Trait Decide
               local CraftLevel, CraftChampionPoints
               if ReferenceLink and ReferenceLink ~= "" then
                 CraftLevel = GetItemLinkRequiredLevel(ReferenceLink)
                 CraftChampionPoints = GetItemLinkRequiredChampionPoints(ReferenceLink)
               end
-              if CraftLevel ~= nil and CraftChampionPoints ~= nil then
+              if CraftLevel == nil or CraftChampionPoints == nil then
+                CraftLevel, CraftChampionPoints = nil, nil
+                WG.ReportWithdrawalNotice(ToLink(ItemId), WG.Lang.CHAT_WITHDRAW_REFERENCE)
+              end
+              do
                 local SawCandidate = false
                 for i in WG.GuildBankSlots do
                   local ItemLink = GetItemLink(3, i)
@@ -745,16 +752,16 @@ function WG.FindDailyItem()
                     if Reason then WG.ReportWithdrawalBlocked(ItemLink, Reason)
                     else
                       local Count = select(2, GetItemInfo(3, i))
-                      AddProduct(GetItemLinkItemId(ItemLink), ItemLink, Count, CraftLevel, CraftChampionPoints)
+                      AddProduct(GetItemLinkItemId(ItemLink), ItemLink, Count, CraftLevel, CraftChampionPoints, true)
                       Have = Have + Count
                     end
                   end
                 end
                 if not SawCandidate then
-                  WG.ReportWithdrawalBlocked(ReferenceLink, WG.Lang.CHAT_WITHDRAW_NOT_FOUND)
+                  WG.ReportWithdrawalBlocked(
+                    (ReferenceLink and ReferenceLink ~= "") and ReferenceLink or ToLink(ItemId),
+                    WG.Lang.CHAT_WITHDRAW_NOT_FOUND)
                 end
-              else
-                WG.ReportWithdrawalBlocked(ToLink(ItemId), WG.Lang.CHAT_WITHDRAW_REFERENCE)
               end
             else
               WG.ReportWithdrawalBlocked(ToLink(ItemId), WG.Lang.CHAT_WITHDRAW_DISABLED)
@@ -871,6 +878,7 @@ function WG.FindDailyItem()
     table.insert(Materials, {
       ["ItemLink"] = Product["ItemLink"], ["ItemId"] = ItemId, ["Count"] = Target,
       ["CraftLevel"] = Product["CraftLevel"], ["CraftChampionPoints"] = Product["CraftChampionPoints"],
+      ["WritProduct"] = Product["WritProduct"],
     })
   end
   --End

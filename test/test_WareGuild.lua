@@ -656,14 +656,35 @@ check("slot lookup keeps white filter", WG.FindItem(3, foundProd.ItemId, foundPr
 SlotLinks[3][5] = GearLink("cp150-trait", 50, 150, 1, 1)
 check("slot lookup keeps no-trait filter", WG.FindItem(3, foundProd.ItemId, foundProd.ItemLink, foundProd).Total == 0)
 
+-- Away from a crafting station there is no reference link: the exact level is not
+-- compared and the journal condition, quality and trait decide.
+local function NoReferenceChecks(Name)
+  GuildBank = {[4] = 43556, [5] = 43556}
+  SlotLinks[3] = {[4] = GearLink("any-level", 50, 160), [5] = GearLink("green", 50, 160, 2, 0)}
+  foundMat, foundProd = DailyProduct()
+  check(Name .. ": white untraited bank item covers the writ without level",
+    foundProd ~= nil and foundProd.Count == 1 and foundMat == 6
+    and foundProd.CraftLevel == nil and foundProd.WritProduct == true)
+  local selected = WG.FindItem(3, foundProd.ItemId, foundProd.ItemLink, foundProd)
+  check(Name .. ": slot lookup selects the white item only", #selected == 1 and selected[1].SlotId == 4)
+  SlotLinks[3] = {[4] = GearLink("green-only", 50, 160, 2, 0), [5] = GearLink("trait-only", 50, 160, 1, 1)}
+  foundMat, foundProd = DailyProduct()
+  check(Name .. ": quality and trait still enforced", foundMat == 12 and foundProd == nil)
+  Bag = {[0] = 43556}
+  SlotLinks[1][0] = GearLink("bag-green", 1, 0, 2, 0)
+  check(Name .. ": bag lookup keeps white filter",
+    WG.FindItem(1, 43556, ToLink(43556), {WritProduct = true}).Total == 0)
+  Bag = {}
+  SlotLinks[1] = {}
+end
 PatternUnavailable = true
-foundMat, foundProd = DailyProduct()
-check("missing pattern falls back to materials", foundMat == 12 and foundProd == nil)
+NoReferenceChecks("missing pattern")
 PatternUnavailable = false
 ReferenceUnavailable = true
-foundMat, foundProd = DailyProduct()
-check("empty reference falls back to materials", foundMat == 12 and foundProd == nil)
+NoReferenceChecks("empty reference")
 ReferenceUnavailable = false
+SlotLinks[3] = {[4] = GearLink("cp160", 50, 160), [5] = GearLink("cp150-trait", 50, 150, 1, 1)}
+GuildBank = {[4] = 43556, [5] = 43556}
 GuildBank = nil
 foundMat, foundProd = DailyProduct()
 check("empty bank falls back to materials", foundMat == 12 and foundProd == nil)
