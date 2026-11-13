@@ -1,5 +1,24 @@
 # CHANGES
 
+## 2026-11-13 - v0.30 (ajustement du manifeste)
+
+- **Nom du manifeste** : renommage de `WareGuild/WareGuild.txt` en
+  `WareGuild/WareGuild.addon`, conformément au choix de format demandé
+  pour cet addon compatible gamepad. L'ancien manifeste est supprimé,
+  sans modifier l'ordre de chargement ni ajouter de restriction de mode.
+- **Bibliothèques optionnelles** : la ligne devient
+  `## OptionalDependsOn: LibLazyCrafting FCOItemSaver LibCharacterKnowledge`,
+  sans contrainte de version. Les infobulles français, anglais et chinois
+  sont alignées sur cette déclaration ; les vérifications d'API à
+  l'exécution restent inchangées.
+- **Vérifications hors jeu** : compilation des huit fichiers Lua en
+  Lua 5.1, 276 assertions réussies et vérification de la présence des
+  fichiers déclarés par le nouveau manifeste pour les langues livrées.
+  Version `0.30` et AddOnVersion inchangés.
+
+**Non testé dans ESO** : le chargement du manifeste et le mode gamepad
+restent à valider dans le client.
+
 ## 2026-11-13 - v0.30 (dépôt des objets inconnus des autres personnages via LCK)
 
 ### Nouvelle règle
