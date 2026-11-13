@@ -1,5 +1,78 @@
 # CHANGES
 
+## 2026-11-13 - v0.29 (regroupement des piles avant tous les dépôts)
+
+### Fonctionnement
+
+- **Tous les dépôts WareGuild** : dépôt de matériaux par catégorie, dépôt
+  intégral et dépôt jusqu'à une quantité cible, y compris le redépôt du
+  surplus d'un retrait. Les objets non empilables conservent leur transfert
+  habituel.
+- **Planification dans Data.lua** : les dépôts et séparations prévus par
+  slot deviennent des transactions par lien d'objet. La quantité nette à
+  déposer reste celle de la règle d'origine. Le calcul de place tient compte
+  du retrait de piles entières, des empilements intermédiaires et des
+  emplacements libérés par le dépôt des piles pleines avant la séparation
+  finale.
+- **Exécution dans Main.lua** : retirer les piles correspondantes de la
+  banque sélectionnée, les empiler dans le sac après chaque retrait, séparer
+  le reliquat à conserver, puis redéposer les piles regroupées. Les slots
+  sont relus à chaque mouvement ; aucune file de slots périmés n'est
+  réutilisée après un empilement.
+- **Exemple validé** : banque `2 + 3` ancolies, sac `25`, quantité à garder
+  dans le sac `5` : retrait des deux piles, empilement à `30`, puis dépôt
+  d'une seule pile de `25` et conservation de `5` dans le sac.
+
+### Protections et repli
+
+- **Place insuffisante** : message dans le chat, aucun retrait pour le
+  regroupement, puis dépôt habituel. Un sac entièrement plein ne bloque plus
+  un dépôt de pile entière. Si le dépôt habituel exige lui-même une
+  séparation et qu'aucun emplacement n'est disponible, il reste impossible :
+  arrêt avec le message de sac plein plutôt qu'un dépôt du reliquat réservé.
+- **Objets compatibles uniquement** : pas d'appariement approximatif par
+  ItemId pour le regroupement. Les contrôles de qualité, trait, niveau et
+  points Champion complètent la comparaison du lien et le contournement
+  historique du niveau interne en banque.
+- **Droits et protections** : respects des exclusions FCOItemSaver existantes.
+  Sans droit de retrait, dépôt habituel avec avertissement. Les slots de
+  banque sont revérifiés avant chaque retrait ; si leur contenu change ou
+  si le droit disparaît, le regroupement restant est ignoré et les piles déjà
+  récupérées sont incluses dans le redépôt.
+- **Événements asynchrones** : attendre à la fois la confirmation locale du
+  transfert en banque et la mise à jour du sac, quel que soit leur ordre.
+  Les mouvements de séparation/empilement attendent les quantités source
+  et destination. Les événements d'autres joueurs ne valident pas le
+  transfert.
+- **Annulation et erreurs** : nettoyage des événements à la fermeture,
+  invalidation des anciens callbacks et garde contre un double démarrage.
+  Une erreur de transfert ou un délai de 10 secondes sans réponse provoque
+  un arrêt avec message invitant à vérifier le sac et la banque. Les objets
+  déjà transférés ne sont pas automatiquement restaurés après cet arrêt.
+- **Langues et version** : messages ajoutés en français, anglais et chinois ;
+  version `0.29`, AddOnVersion `20261113`.
+
+### Vérification
+
+API et signatures vérifiées dans
+[ESOUI live, révision f819c808](https://github.com/esoui/esoui/blob/f819c808d57e237707c76e7b52518e2589c9e191/ESOUIDocumentation.txt) :
+`TransferFromGuildBank`, `TransferToGuildBank`, `GetSlotStackSize`,
+`FindFirstEmptySlotInBag`, `DoesPlayerHaveGuildPermission`,
+`RequestMoveItem` et événements de banque/inventaire.
+
+Compilation de tous les fichiers Lua livrés en Lua 5.1 et **216 assertions
+hors jeu réussies** : 92 tests existants, plus 124 assertions de
+`test/test_GuildBankDeposit.lua`. Le nouveau harnais charge les vrais fichiers
+Data.lua et Main.lua et simule les transferts et leurs événements différés :
+exemple des ancolies, tous les types de dépôt, limites de pile, 20 jeux de
+quantités, manque de place, banque pleine, événements dans les deux ordres,
+objets protégés, niveaux différents, changement de droits/contenu,
+fermeture, changement de guilde, erreur serveur et timeout.
+
+**Non testé dans ESO** : validation hors jeu uniquement. Les transferts
+concernent exclusivement la banque de guilde sélectionnée et utilisent le
+sac à dos réel, sans sac virtuel.
+
 ## 2026-11-12 - v0.28 (craft level des objets finis dans FindDailyItem)
 
 - **Niveau exact du writ** : pour la forge, la couture, le bois et la

@@ -42,6 +42,9 @@ WG.Lang = {
   
   ["CHAT_BACKBAG_FULL"] = "Sac à dos plein",
   ["CHAT_GUILD_BANK_FULL"] = "Banque de guilde pleine",
+  ["CHAT_REGROUP_NO_SPACE"] = "Regroupement de <<1>> ignoré : place insuffisante dans le sac à dos. Le dépôt habituel continue.",
+  ["CHAT_REGROUP_SKIPPED"] = "Regroupement de <<1>> ignoré : droit de retrait absent ou contenu de banque modifié. Le dépôt continue.",
+  ["CHAT_REGROUP_FAILED"] = "Transfert de <<1>> interrompu. Vérifiez les objets restants dans le sac à dos et en banque de guilde avant de relancer.",
   
   --Setting, Need to Translate
   

@@ -42,6 +42,9 @@ WG.Lang = {
   
   ["CHAT_BACKBAG_FULL"] = "背包已满！",
   ["CHAT_GUILD_BANK_FULL"] = "银行已满！",
+  ["CHAT_REGROUP_NO_SPACE"] = "<<1>> 合堆已跳过：背包空间不足。继续正常存入。",
+  ["CHAT_REGROUP_SKIPPED"] = "<<1>> 合堆已跳过：无取出权限或银行内容已变化。继续存入。",
+  ["CHAT_REGROUP_FAILED"] = "<<1>> 转移中断。请检查背包和公会银行中剩余的物品后再重试。",
   
   --Setting, Need to Translate
   

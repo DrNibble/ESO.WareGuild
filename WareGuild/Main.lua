@@ -3,7 +3,7 @@ local WG = SDC_WareGuild
 WG.name = "WareGuild"
 WG.title = "WareGuild"
 WG.author = "@MelanAster"
-WG.version = "0.28"
+WG.version = "0.29"
 
 --Default Setting
 WG.Default = {
@@ -402,6 +402,196 @@ local Queue = {--[[
 
 local Close = false
 
+local DepositEvents = WG.name .. "_Deposit"
+local function ClearDepositEvents()
+  EVENT_MANAGER:UnregisterForEvent(DepositEvents, EVENT_INVENTORY_SINGLE_SLOT_UPDATE)
+  EVENT_MANAGER:UnregisterForEvent(DepositEvents, EVENT_GUILD_BANK_ITEM_ADDED)
+  EVENT_MANAGER:UnregisterForEvent(DepositEvents, EVENT_GUILD_BANK_ITEM_REMOVED)
+  EVENT_MANAGER:UnregisterForEvent(DepositEvents, EVENT_GUILD_BANK_TRANSFER_ERROR)
+end
+
+local function DepositMessage(Key, Target)
+  d("[WareGuild] " .. zo_strformat(WG.Lang[Key], Target.ItemLink))
+end
+
+--Wait for Both the Local Bank Acknowledgement and the Backpack Update.
+--The Queue Identity Cancels Old Callbacks After Closing or Switching Sessions.
+local function DepositOperation(Target, BankEvent, BankSlot, Ready, Action, Continue)
+  local Pending = {}
+  Target.Pending = Pending
+  local BankReady = BankEvent == nil
+  local function Active()
+    return Queue[1] == Target and Target.Pending == Pending
+  end
+  local function Stop()
+    if not Active() then return end
+    Target.Pending = nil
+    ClearDepositEvents()
+    DepositMessage("CHAT_REGROUP_FAILED", Target)
+    WG.GuildBankEnd()
+  end
+  local function Check()
+    if not Active() then return end
+    if GetSelectedGuildBankId() ~= Target.GuildId then Stop() return end
+    if BankReady and Ready() then
+      Target.Pending = nil
+      ClearDepositEvents()
+      Continue()
+    end
+  end
+  EVENT_MANAGER:RegisterForEvent(DepositEvents, EVENT_INVENTORY_SINGLE_SLOT_UPDATE,
+    function(_, BagId)
+      if BagId == 1 then Check() end
+    end)
+  if BankEvent then
+    EVENT_MANAGER:RegisterForEvent(DepositEvents, BankEvent,
+      function(_, SlotId, IsLocal)
+        if IsLocal == false or (BankSlot and SlotId ~= BankSlot) then return end
+        BankReady = true
+        Check()
+      end)
+  end
+  EVENT_MANAGER:RegisterForEvent(DepositEvents, EVENT_GUILD_BANK_TRANSFER_ERROR, Stop)
+  zo_callLater(Stop, 10000)
+  Action()
+end
+
+local function DepositSlots(Target, BagId)
+  --No ItemId Fuzzy Match: Different Qualities/Levels Must Never Be Merged.
+  local Candidates = WG.FindItem(BagId, nil, Target.ItemLink)
+  local Slots = {Total = 0}
+  for _, Slot in ipairs(Candidates) do
+    local Link = GetItemLink(BagId, Slot.SlotId)
+    --FindItem's Legacy Internal-Level Workaround Is Broader Than Stacking.
+    if GetItemLinkQuality(Link) == GetItemLinkQuality(Target.ItemLink)
+      and GetItemLinkTraitInfo(Link) == GetItemLinkTraitInfo(Target.ItemLink)
+      and GetItemLinkRequiredLevel(Link) == GetItemLinkRequiredLevel(Target.ItemLink)
+      and GetItemLinkRequiredChampionPoints(Link) == GetItemLinkRequiredChampionPoints(Target.ItemLink) then
+      table.insert(Slots, Slot)
+      Slots.Total = Slots.Total + Slot.Count
+    end
+  end
+  return Slots
+end
+
+local function DepositMove(Target, Source, Dest, Count, Continue)
+  local BeforeSource = GetSlotStackSize(1, Source)
+  local BeforeDest = GetSlotStackSize(1, Dest)
+  DepositOperation(Target, nil, nil,
+    function()
+      return GetSlotStackSize(1, Source) == BeforeSource - Count
+        and GetSlotStackSize(1, Dest) == BeforeDest + Count
+    end,
+    function() CallSecureProtected("RequestMoveItem", 1, Source, 1, Dest, Count) end,
+    Continue)
+end
+
+--Only Pack This Transaction's Unlocked Item, Never Unrelated Queued Slots.
+local function PackDeposit(Target, Continue)
+  local Slots = DepositSlots(Target, 1)
+  local Dest, Source, Capacity
+  for _, Slot in ipairs(Slots) do
+    local Count, Max = GetSlotStackSize(1, Slot.SlotId)
+    if Count < Max then
+      if not Dest then Dest, Capacity = Slot, Max - Count
+      else Source = Slot end
+    end
+  end
+  if not Source then Continue() return end
+  DepositMove(Target, Source.SlotId, Dest.SlotId, math.min(Source.Count, Capacity),
+    function() PackDeposit(Target, Continue) end)
+end
+
+local function StoreDeposit(Target)
+  if Target.Remaining <= 0 then WG.GuildBankQueue(true) return end
+  local Slots = DepositSlots(Target, 1)
+  local Source = Slots[1]
+  if not Source or Slots.Total < Target.Remaining then
+    DepositMessage("CHAT_REGROUP_FAILED", Target)
+    WG.GuildBankEnd()
+    return
+  end
+  for _, Slot in ipairs(Slots) do
+    if Slot.Count == Target.Remaining then Source = Slot break end
+  end
+  if Source.Count > Target.Remaining then
+    local Empty = FindFirstEmptySlotInBag(1)
+    if Empty == nil then
+      d("[WareGuild] " .. WG.Lang.CHAT_BACKBAG_FULL)
+      WG.GuildBankEnd()
+      return
+    end
+    --Move the Remainder Aside; the Source Now Contains Exactly the Deposit.
+    DepositMove(Target, Source.SlotId, Empty, Source.Count - Target.Remaining,
+      function() StoreDeposit(Target) end)
+    return
+  end
+  if GetNumBagFreeSlots(3) == 0 then
+    d("[WareGuild] " .. WG.Lang.CHAT_GUILD_BANK_FULL)
+    WG.GuildBankEnd()
+    return
+  end
+  local Before, Count = Slots.Total, Source.Count
+  DepositOperation(Target, EVENT_GUILD_BANK_ITEM_ADDED, nil,
+    function() return DepositSlots(Target, 1).Total == Before - Count end,
+    function() TransferToGuildBank(1, Source.SlotId) ClearCursor() end,
+    function()
+      Target.Remaining = Target.Remaining - Count
+      StoreDeposit(Target)
+    end)
+end
+
+local function WithdrawDeposit(Target)
+  local Source = Target.Withdrawals[Target.WithdrawIndex]
+  if not Source then StoreDeposit(Target) return end
+  --Recheck Permissions, Space and Slot Identity Before Every Whole-Stack Take.
+  local Current
+  for _, Slot in ipairs(DepositSlots(Target, 3)) do
+    if Slot.SlotId == Source.SlotId and Slot.Count == Source.Count then Current = Slot end
+  end
+  if not Current or GetNumBagFreeSlots(1) == 0
+    or not DoesPlayerHaveGuildPermission(Target.GuildId, GUILD_PERMISSION_BANK_WITHDRAW) then
+    DepositMessage(GetNumBagFreeSlots(1) == 0 and "CHAT_REGROUP_NO_SPACE" or "CHAT_REGROUP_SKIPPED", Target)
+    StoreDeposit(Target) --Also Return Any Stacks Already Borrowed.
+    return
+  end
+  local Before = DepositSlots(Target, 1).Total
+  DepositOperation(Target, EVENT_GUILD_BANK_ITEM_REMOVED, Source.SlotId,
+    function() return DepositSlots(Target, 1).Total == Before + Source.Count end,
+    function() TransferFromGuildBank(Source.SlotId) ClearCursor() end,
+    function()
+      Target.Remaining = Target.Remaining + Source.Count
+      Target.WithdrawIndex = Target.WithdrawIndex + 1
+      PackDeposit(Target, function() WithdrawDeposit(Target) end)
+    end)
+end
+
+local function BeginDeposit(Target)
+  if Target.Started then return end
+  Target.Started = true
+  Target.GuildId = GetSelectedGuildBankId()
+  Target.Remaining = Target.Count
+  PackDeposit(Target, function()
+    local BagSlots, BankSlots = DepositSlots(Target, 1), DepositSlots(Target, 3)
+    if #BagSlots == 0 then StoreDeposit(Target) return end
+    if BagSlots.Total < Target.Count then StoreDeposit(Target) return end
+    if #BankSlots == 0 then StoreDeposit(Target) return end
+    local _, Max = GetSlotStackSize(1, BagSlots[1].SlotId)
+    if GetNumBagFreeSlots(1) < WG.GuildBankRegroupSpace(BagSlots, BankSlots, Max, Target.Count) then
+      DepositMessage("CHAT_REGROUP_NO_SPACE", Target)
+      StoreDeposit(Target)
+      return
+    end
+    if not DoesPlayerHaveGuildPermission(Target.GuildId, GUILD_PERMISSION_BANK_WITHDRAW) then
+      DepositMessage("CHAT_REGROUP_SKIPPED", Target)
+      StoreDeposit(Target)
+      return
+    end
+    Target.Withdrawals, Target.WithdrawIndex = BankSlots, 1
+    WithdrawDeposit(Target)
+  end)
+end
+
 --When open GuildBank
 function WG.GuildBankCore(scene, _, newstate)
   --GuildBank?
@@ -415,6 +605,8 @@ function WG.GuildBankCore(scene, _, newstate)
   
   --When Open
   if newstate ~= SCENE_SHOWN then return end
+  ClearDepositEvents()
+  Queue = {}
     --Start to Set Work 
   Step = WG.AllGuildStep()
   if WG.SV.KeepCraft and HaveWrits() then
@@ -474,13 +666,17 @@ function WG.GuildBankWork(DoRemove)
   if GetNumBagFreeSlots(BAG_BACKPACK) == 0 then
     if ShouldStack() then
       WG.Stack(function() WG.GuildBankWork(false) end)
+      return
     else
-      d("[WareGuild] "..WG.Lang.CHAT_STOP)
-      d("[WareGuild] "..WG.Lang.CHAT_BACKBAG_FULL)
-      Close = false
-      WG.GuildBankEnd()
+      local Type = Step[1].Type
+      if not (Type < 10 or Type == WAREGUILD_STORE_TO or Type == WAREGUILD_STORE_ALL) then
+        d("[WareGuild] "..WG.Lang.CHAT_STOP)
+        d("[WareGuild] "..WG.Lang.CHAT_BACKBAG_FULL)
+        Close = false
+        WG.GuildBankEnd()
+        return
+      end
     end
-    return
   end
 
   local bank = Step[1]
@@ -653,6 +849,7 @@ function WG.GuildBankWork(DoRemove)
   end
   
 --Add Queue EndPoint
+  Queue = WG.PlanGuildBankDeposits(Queue)
   table.insert(Queue, "Done")
   WG.GuildBankQueue(false)
   return
@@ -682,6 +879,10 @@ function WG.GuildBankQueue(Event)
 
 --DoQueue
   local Target = Queue[1]
+  if Target.Type == WAREGUILD_QUEUE_DEPOSIT then
+    BeginDeposit(Target)
+    return
+  end
   --Take
   if Target.Type == WAREGUILD_QUEUE_TAKE then
     --Free slot?
@@ -758,6 +959,7 @@ function WG.GuildBankEnd()
   --Reset V
   Step = {}
   Queue = {}
+  ClearDepositEvents()
   --Unregister
   SCENE_MANAGER:UnregisterCallback("SceneStateChanged", WG.GuildBankCore)
   EVENT_MANAGER:UnregisterForEvent(WG.name, EVENT_GUILD_BANK_ITEMS_READY)

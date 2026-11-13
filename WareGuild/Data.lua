@@ -24,6 +24,58 @@ WAREGUILD_STORE_T = 9 --Trait Items
 WAREGUILD_QUEUE_TAKE = 0
 WAREGUILD_QUEUE_STORE = 1
 WAREGUILD_QUEUE_SPLIT = 2
+WAREGUILD_QUEUE_DEPOSIT = 3
+
+--Replace Slot-Based Deposits With Per-Link Transactions Before Any Slot Moves.
+--Count Is the Net Deposit Requested by the Original Rule, Not the Bank Total.
+function WG.PlanGuildBankDeposits(Queue)
+  local Planned, Groups, Split = {}, {}, {}
+  for _, Entry in ipairs(Queue) do
+    if Entry.Type == WAREGUILD_QUEUE_SPLIT then
+      Split[Entry.SlotId] = Entry.Count
+    elseif Entry.Type == WAREGUILD_QUEUE_STORE then
+      local Link = GetItemLink(1, Entry.SlotId)
+      local Count, Max = GetSlotStackSize(1, Entry.SlotId)
+      if Link ~= "" and Max > 1 then
+        local Group = Groups[Link]
+        if not Group then
+          Group = {Type = WAREGUILD_QUEUE_DEPOSIT, ItemLink = Link, Count = 0}
+          Groups[Link] = Group
+          table.insert(Planned, Group)
+        end
+        Group.Count = Group.Count + Count - (Split[Entry.SlotId] or 0)
+      else
+        --Non-Stackable Equipment Keeps Its Original Slot-Based Transfer.
+        if Split[Entry.SlotId] then
+          table.insert(Planned, {Type = WAREGUILD_QUEUE_SPLIT,
+            SlotId = Entry.SlotId, Count = Split[Entry.SlotId]})
+        end
+        table.insert(Planned, Entry)
+      end
+      Split[Entry.SlotId] = nil
+    else
+      table.insert(Planned, Entry)
+    end
+  end
+  return Planned
+end
+
+--Peak Space for Whole-Stack Takes, Packing Between Them, Then the Final Split.
+--Full Stacks Are Deposited First, Releasing Slots Before That Split.
+function WG.GuildBankRegroupSpace(BagSlots, BankSlots, Max, DepositCount)
+  local Total, Peak = BagSlots.Total, #BagSlots
+  for _, Slot in ipairs(BankSlots) do
+    Peak = math.max(Peak, math.ceil(Total / Max) + 1)
+    Total = Total + Slot.Count
+    Peak = math.max(Peak, math.ceil(Total / Max))
+  end
+  local ToDeposit = DepositCount + BankSlots.Total
+  if BagSlots.Total > DepositCount and ToDeposit % Max ~= 0 then
+    local AfterFullDeposits = Total - math.floor(ToDeposit / Max) * Max
+    Peak = math.max(Peak, math.ceil(AfterFullDeposits / Max) + 1)
+  end
+  return Peak - #BagSlots
+end
 
 -------------------
 ----Daily Writs----
