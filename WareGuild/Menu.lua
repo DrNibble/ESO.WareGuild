@@ -199,6 +199,17 @@ local function GuildRules(GuildIndex)
       setFunc = function(var) State.Fuzzy = var end,
       width = "half",
       },
+       { --UpdateList
+      type = "button",
+      name = WG.Lang.GUILD_UPDATE_ITEM_LIST,
+      func = function()
+        State.Item = nil
+        local Control = _G["WG_Guild_" .. GuildIndex .. "_Item"]
+        Control.data.choices = ItemList()
+        Control:UpdateChoices()
+      end,
+      width = "half",
+      },
       {
     type = "button",
     name = WG.Lang.GUILD_STORE_UNKNOWN,
@@ -221,17 +232,7 @@ local function GuildRules(GuildIndex)
     end,
     width = "half",
   },
-      { --UpdateList
-      type = "button",
-      name = WG.Lang.GUILD_UPDATE_ITEM_LIST,
-      func = function()
-        State.Item = nil
-        local Control = _G["WG_Guild_" .. GuildIndex .. "_Item"]
-        Control.data.choices = ItemList()
-        Control:UpdateChoices()
-      end,
-      width = "half",
-      },
+     
       { --Withdraw all
       type = "button",
       name = WG.Lang.GUILD_TAKE_ALL,
