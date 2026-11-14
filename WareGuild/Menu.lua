@@ -205,14 +205,8 @@ local function GuildRules(GuildIndex)
     tooltip = WG.Lang.GUILD_STORE_UNKNOWN_TOOLTIP,
     disabled = function() return not WG.HasCharacterKnowledge() end,
     func = function()
-      -- local GuildId = WG.SV.Guild[GuildIndex]
       if not WG.HasCharacterKnowledge() then return end
-      -- local Rules = WG.SV["Guild" .. GuildIndex]
-      -- for _, Rule in ipairs(Rules) do
-        -- if Rule.Type == WAREGUILD_STORE_UNKNOWN then return end
-      -- end
       InsertStep(GuildIndex, {["Type"] = WAREGUILD_STORE_UNKNOWN})
-      --table.insert(Rules, {GuildId = GuildId, Type = WAREGUILD_STORE_UNKNOWN})
     end,
     width = "half",
   },
