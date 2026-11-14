@@ -685,6 +685,25 @@ for _, Timer in ipairs(AbandonedTimers) do Timer() end
 check("closed-run timers cannot interrupt a reopened withdrawal",
   total(1, 43559) == 1 and Settings == "1" and not hasMessage("no confirmation after 10 seconds"))
 
+
+--Corrected TakeGuildBankItem: a bank slot that changed between the rule
+--analysis and the actual withdrawal (another item, or the same item with a
+--different stack size) is skipped silently and the run continues.
+reset()
+Bank[4], Bank[5] = item(30157, 2), item(30157, 3)
+OnWithdrawal = function() Bank[5] = item(30158, 3) end --slot 5 replaced after the first take
+run({{GuildId = 42, Type = WAREGUILD_TAKE_ALL, ItemId = 30157}})
+check("changed slot: first stack still withdrawn", total(1, 30157) == 2)
+check("changed slot: replaced stack not taken", total(1, 30158) == 0 and numOps("take") == 1)
+check("changed slot: no report message", not hasMessage(WG.Lang.CHAT_WITHDRAW_CHANGED))
+
+reset()
+Bank[4], Bank[5] = item(30157, 2), item(30157, 3)
+OnWithdrawal = function() Bank[5] = item(30157, 7) end --same item, new stack size
+run({{GuildId = 42, Type = WAREGUILD_TAKE_ALL, ItemId = 30157}})
+check("changed count: resized stack not taken", total(1, 30157) == 2 and total(3, 30157) == 7)
+check("changed count: exactly one withdrawal", numOps("take") == 1)
+
 dailySetup(); Bank[7788] = item(43559, 1, 1, 1, 16)
 OnWithdrawal = function()
   for Slot, Item in pairs(Bank) do if Item.id == 43559 then LockedBank[Slot] = true end end
