@@ -5,6 +5,7 @@ local WG = SDC_WareGuild
 --StepType_TAKE
 WAREGUILD_TAKE_TO = 11
 WAREGUILD_TAKE_ALL = 12
+WAREGUILD_TAKE_UNKNOWN = 13
 WAREGUILD_DAILY = 31
 --StepType_STORE
 WAREGUILD_STORE_TO = 21
@@ -42,6 +43,36 @@ function WG.IsUnknownToOtherCharacters(ItemLink)
   --nil Server Means the Current Server; Account Filter Excludes Imported Accounts.
   if Needed(LCK.GetItemKnowledgeList(ItemLink, nil, nil, Account), false) then return true end
   --Equipment Research Uses a Separate API, Not GetItemKnowledgeList.
+  if type(LCK.GetSmithingResearchFromItemLink) == "function"
+    and type(LCK.GetSmithingResearchStatusForCharacters) == "function" then
+    local Craft, Line, Trait = LCK.GetSmithingResearchFromItemLink(ItemLink)
+    if Craft and Line and Trait then
+      return Needed(LCK.GetSmithingResearchStatusForCharacters(Craft, Line, Trait, nil, nil, Account), true)
+    end
+  end
+  return false
+end
+
+--The Active Character Does Not Know the Item Yet: Motifs, Recipes,
+--Furnishing Plans, Scribing Items and Researchable Equipment. As for the
+--Deposit Rule, NODATA/INVALID Never Count as UNKNOWN and a Research in
+--Progress (Remaining Set) Is Not Requested.
+function WG.IsUnknownToCurrentCharacter(ItemLink)
+  if not WG.HasCharacterKnowledge() then return false end
+  local LCK, Account, CurrentId = LibCharacterKnowledge, GetDisplayName(), GetCurrentCharacterId()
+  local function Needed(Entries, IsResearch)
+    if type(Entries) ~= "table" then return false end
+    for _, Entry in ipairs(Entries) do
+      if Entry.id and tostring(Entry.id) == tostring(CurrentId)
+        and type(Entry.account) == "string" and string.lower(Entry.account) == string.lower(Account)
+        and Entry.knowledge == LCK.KNOWLEDGE_UNKNOWN
+        and (not IsResearch or Entry.remaining == nil) then
+        return true
+      end
+    end
+    return false
+  end
+  if Needed(LCK.GetItemKnowledgeList(ItemLink, nil, nil, Account), false) then return true end
   if type(LCK.GetSmithingResearchFromItemLink) == "function"
     and type(LCK.GetSmithingResearchStatusForCharacters) == "function" then
     local Craft, Line, Trait = LCK.GetSmithingResearchFromItemLink(ItemLink)

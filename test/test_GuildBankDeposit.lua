@@ -914,18 +914,21 @@ check("menu button enabled with library", not Buttons[3].disabled())
 Buttons[3].func()
 check("menu creates rule in selected guild only", #WG.SV.Guild3 == 1 and WG.SV.Guild3[1].GuildId == 44
   and WG.SV.Guild3[1].Type == WAREGUILD_STORE_UNKNOWN and #WG.SV.Guild1 == 0)
+--The reworked button inserts one rule per click, like every other rule
+--button, and no longer deduplicates or requires a selected guild.
 Buttons[3].func()
-check("menu does not create duplicate knowledge rules", #WG.SV.Guild3 == 1)
+check("deposit button adds one rule per click", #WG.SV.Guild3 == 2)
 WG.SV.Guild[4] = false
 Buttons[4].func()
-check("menu refuses a rule without a destination guild", #WG.SV.Guild4 == 0)
+check("deposit button still creates the rule for an unselected guild slot",
+  #WG.SV.Guild4 == 1 and WG.SV.Guild4[1].GuildId == false)
 LibCharacterKnowledge = nil
 check("menu button disabled without library", Buttons[2].disabled())
 Buttons[2].func()
 check("disabled menu function cannot add rule", #WG.SV.Guild2 == 0)
 WG.AllGuildStep = OriginalAllGuildStep
 local SavedSteps = WG.AllGuildStep()
-check("saved knowledge rule survives ordinary rule flattening", #SavedSteps == 1
+check("saved knowledge rules survive ordinary rule flattening", #SavedSteps == 3
   and SavedSteps[1].Type == WAREGUILD_STORE_UNKNOWN and SavedSteps[1].GuildId == 44)
 
 --Exercise the real dropdown choices, selections and refresh callbacks.
@@ -1052,6 +1055,84 @@ run({{GuildId = 42, Type = WAREGUILD_TAKE_TO, ItemId = 30157, Count = 10}})
 check("no link bug: 10 in the bag and one bank stack of 12",
   total(1, 30157) == 10 and total(3, 30157) == 12 and select(2, total(3, 30157)) == 1)
 check("no link bug: borrowing announced once", numOps("take") == 3)
+
+
+--Withdraw-unknown rule: the active character retrieves every guild bank
+--item it has not learned yet (LibCharacterKnowledge), through the menu
+--button next to the deposit one and through the step itself.
+reset(); installLCK()
+local function selfUnknown(Id) Knowledge[Id] = {entry("self", 2)} end
+local function selfKnown(Id) Knowledge[Id] = {entry("self", 1)} end
+selfUnknown(30157)
+check("current character unknown item qualifies", WG.IsUnknownToCurrentCharacter(link(item(30157, 1))))
+selfKnown(30157)
+check("current character known item does not qualify", not WG.IsUnknownToCurrentCharacter(link(item(30157, 1))))
+Knowledge[30157] = {entry("alt", 2)}
+check("alt-only unknown does not qualify for the active character", not WG.IsUnknownToCurrentCharacter(link(item(30157, 1))))
+Knowledge[30157] = {entry("self", 0)}
+check("nodata never counts as unknown", not WG.IsUnknownToCurrentCharacter(link(item(30157, 1))))
+Knowledge[30157] = {entry("self", 2, "@someoneelse")}
+check("foreign account never counts", not WG.IsUnknownToCurrentCharacter(link(item(30157, 1))))
+ResearchItems[10003] = {1, 3, 5}
+ResearchKnowledge[3] = {entry("self", 2, nil, 300)}
+check("research in progress not requested", not WG.IsUnknownToCurrentCharacter(link(item(10003, 1))))
+ResearchKnowledge[3] = {entry("self", 2)}
+check("unresearched trait requested", WG.IsUnknownToCurrentCharacter(link(item(10003, 1))))
+LibCharacterKnowledge = nil
+check("LCK missing: current-character predicate false", not WG.IsUnknownToCurrentCharacter(link(item(30157, 1))))
+
+--Execution: only the items unknown to the active character are withdrawn.
+reset(); installLCK()
+selfUnknown(30157); selfKnown(30158)
+Knowledge[30159] = {entry("alt", 2)}
+Bank[4], Bank[5], Bank[6] = item(30157, 1), item(30158, 1), item(30159, 1)
+run({{GuildId = 42, Type = WAREGUILD_TAKE_UNKNOWN}})
+check("unknown item withdrawn to the backpack", total(1, 30157) == 1)
+check("known item stays in the bank", total(3, 30158) == 1)
+check("alt-only item stays in the bank", total(3, 30159) == 1)
+check("exactly one withdrawal", numOps("take") == 1)
+check("step description identifies the new rule",
+  WG.StepToString({Type = WAREGUILD_TAKE_UNKNOWN}):find(WG.Lang.CHAT_TAKE_UNKNOWN, 1, true) ~= nil)
+
+--Menu: the withdraw button sits right of the deposit button in every guild.
+reset(); installLCK()
+WG.SV.Guild = {}
+for Index = 1, 5 do WG.SV.Guild[Index] = 41 + Index; WG.SV["Guild" .. Index] = {} end
+GetGuildId = function(Index) return 41 + Index end
+WG.BuildMenu()
+local DepositButtons, WithdrawButtons = {}, {}
+for _, Option in ipairs(Options) do
+  if Option.controls then
+    local DepositAt, WithdrawAt
+    for Position, Control in ipairs(Option.controls) do
+      if Control.name == WG.Lang.GUILD_STORE_UNKNOWN then
+        DepositAt = Position; table.insert(DepositButtons, Control)
+      end
+      if Control.name == WG.Lang.GUILD_TAKE_UNKNOWN then
+        WithdrawAt = Position; table.insert(WithdrawButtons, Control)
+      end
+    end
+    if DepositAt then
+      check("withdraw button right of the deposit button", WithdrawAt == DepositAt + 1)
+    end
+  end
+end
+check("one button pair per guild", #DepositButtons == 5 and #WithdrawButtons == 5)
+check("buttons are half width", DepositButtons[1].width == "half" and WithdrawButtons[1].width == "half")
+check("withdraw button enabled with library", not WithdrawButtons[3].disabled())
+WithdrawButtons[3].func()
+check("menu creates rule in selected guild only", #WG.SV.Guild3 == 1 and WG.SV.Guild3[1].GuildId == 44
+  and WG.SV.Guild3[1].Type == WAREGUILD_TAKE_UNKNOWN and #WG.SV.Guild1 == 0)
+WithdrawButtons[3].func()
+check("each click adds one rule, like the deposit button", #WG.SV.Guild3 == 2)
+WG.SV.Guild[4] = false
+WithdrawButtons[4].func()
+check("rule still created for an unselected guild slot, like the deposit button",
+  #WG.SV.Guild4 == 1 and WG.SV.Guild4[1].GuildId == false)
+LibCharacterKnowledge = nil
+check("withdraw button disabled without library", WithdrawButtons[2].disabled())
+WithdrawButtons[2].func()
+check("disabled withdraw function cannot add rule", #WG.SV.Guild2 == 0)
 
 print(string.format("deposit, knowledge and menu passed=%d failed=%d", Passed, Failed))
 if Failed > 0 then os.exit(1) end

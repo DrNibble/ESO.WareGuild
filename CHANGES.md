@@ -1,5 +1,35 @@
 # CHANGES
 
+## 2026-11-14 - v0.40 (récupérer les objets inconnus du personnage actif)
+
+**Objectif** : un bouton « Récupérer les objets inconnus du personnage actif » à
+droite du bouton « Déposer les objets inconnus de mes autres personnages » dans
+chaque sous-menu de guilde.
+
+**Changements** :
+- Nouveau type d'étape `WAREGUILD_TAKE_UNKNOWN` (13) et nouveau prédicat
+  `WG.IsUnknownToCurrentCharacter` (Data.lua) : l'objet (recette, plan de
+  mobilier, motif, grimoire/script, équipement à rechercher) est inconnu du
+  personnage actif selon LibCharacterKnowledge. Comme pour le dépôt, les
+  données absentes (NODATA/INVALID) ne comptent jamais comme inconnues et une
+  recherche en cours n'est pas demandée.
+- Menu.lua : le bouton de dépôt passe en demi-largeur et le nouveau bouton
+  s'affiche à sa droite ; comme le bouton de dépôt retravaillé, il insère la
+  règle via InsertStep (chaque clic ajoute une règle, guilde sélectionnée ou
+  non) et est désactivé sans LibCharacterKnowledge.
+- Main.lua : l'étape retire chaque pile de la banque de guilde non liée, non
+  verrouillée, non volée et non protégée dont l'objet est inconnu du personnage
+  actif ; affichage dédié dans la liste des règles (StepToString).
+- Chaînes ajoutées en anglais, français et chinois.
+
+**Limites** : pas d'ouverture automatique pour cette étape (le contenu de la
+banque n'est lisible que banque ouverte) ; les objets déjà connus du personnage
+actif et ceux utiles seulement aux autres personnages restent en banque.
+
+**Tests** : 26 nouvelles assertions (prédicat, exécution de l'étape, boutons des
+cinq guildes) dans test_GuildBankDeposit.lua. Validé 333/333 et 98/98 sous Lua
+5.1 avec les contrôles de retrait actifs dans Main.lua ; non testé dans ESO.
+
 ## 2026-11-14 - v0.39.1 (refactor : construction du menu de banque de guilde)
 
 **Objectif** : les cinq sections guilde de Menu.lua (sélecteur de guilde +

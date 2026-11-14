@@ -214,7 +214,18 @@ local function GuildRules(GuildIndex)
       InsertStep(GuildIndex, {["Type"] = WAREGUILD_STORE_UNKNOWN})
       --table.insert(Rules, {GuildId = GuildId, Type = WAREGUILD_STORE_UNKNOWN})
     end,
-    width = "full",
+    width = "half",
+  },
+      { --Withdraw every bank item unknown to the active character.
+    type = "button",
+    name = WG.Lang.GUILD_TAKE_UNKNOWN,
+    tooltip = WG.Lang.GUILD_TAKE_UNKNOWN_TOOLTIP,
+    disabled = function() return not WG.HasCharacterKnowledge() end,
+    func = function()
+      if not WG.HasCharacterKnowledge() then return end
+      InsertStep(GuildIndex, {["Type"] = WAREGUILD_TAKE_UNKNOWN})
+    end,
+    width = "half",
   },
       { --UpdateList
       type = "button",

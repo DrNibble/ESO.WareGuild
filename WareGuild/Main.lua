@@ -366,6 +366,10 @@ function WG.StepToString(Step)
     return "|t25:25:esoui/art/treeicons/gamepad/gp_esoplussub_increasedbankspace.dds|t "
       .. WG.Lang.CHAT_STORE_UNKNOWN
   end
+  if Type == WAREGUILD_TAKE_UNKNOWN then
+    return "|t25:25:esoui/art/tooltips/icon_bag.dds|t "
+      .. WG.Lang.CHAT_TAKE_UNKNOWN
+  end
   local Craft = {WG.Lang.BLACKSMITH, WG.Lang.CLOTH, WG.Lang.ENCHANT, WG.Lang.ALCHEMY, WG.Lang.COOK, WG.Lang.WOOD, WG.Lang.JEWELRY, WG.Lang.STYLE, WG.Lang.TRAIT}
   if Type < 10 then 
     local String = "|t25:25:esoui/art/treeicons/gamepad/gp_esoplussub_increasedbankspace.dds|t "
@@ -942,6 +946,22 @@ function WG.GuildBankWork(DoRemove)
       end
     end
   end
+  --Unbound Learnable Items Unknown to the Active Character.
+  if bank.Type == WAREGUILD_TAKE_UNKNOWN then
+    if not WG.HasCharacterKnowledge() then
+      d("[WareGuild] " .. WG.Lang.CHAT_KNOWLEDGE_UNAVAILABLE)
+    else
+      for SlotId in WG.GuildBankSlots do
+        if KnowledgeSlotAllowed(3, SlotId) then
+          local Link = GetItemLink(3, SlotId)
+          if WG.IsUnknownToCurrentCharacter(Link) then
+            table.insert(Queue, {Type = WAREGUILD_QUEUE_TAKE, SlotId = SlotId,
+              ItemLink = Link, Count = select(2, GetItemInfo(3, SlotId))})
+          end
+        end
+      end
+    end
+  end
   --CraftStore
   if bank.Type < 10 then
     local Slot = WG.FindItemType(bank.Type)
@@ -955,7 +975,7 @@ function WG.GuildBankWork(DoRemove)
   end
   
   --ItemTake
-  if bank.Type > 10 and bank.Type < 20 then
+  if bank.Type > 10 and bank.Type < 20 and bank.Type ~= WAREGUILD_TAKE_UNKNOWN then
     local Slot = WG.FindItem(3, bank.ItemId, bank.ItemLink, bank)
     --TakeAll
     if bank.Type == WAREGUILD_TAKE_ALL then
