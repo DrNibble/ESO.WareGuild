@@ -211,7 +211,7 @@ local function GuildRules(GuildIndex)
       -- for _, Rule in ipairs(Rules) do
         -- if Rule.Type == WAREGUILD_STORE_UNKNOWN then return end
       -- end
-      ItemStep(GuildIndex, State, WAREGUILD_STORE_UNKNOWN)
+      InsertStep(GuildIndex, {["Type"] = WAREGUILD_STORE_UNKNOWN})
       --table.insert(Rules, {GuildId = GuildId, Type = WAREGUILD_STORE_UNKNOWN})
     end,
     width = "full",
