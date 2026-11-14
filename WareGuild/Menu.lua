@@ -206,7 +206,7 @@ local function GuildRules(GuildIndex)
     disabled = function() return not WG.HasCharacterKnowledge() end,
     func = function()
       -- local GuildId = WG.SV.Guild[GuildIndex]
-      -- if not GuildId or not WG.HasCharacterKnowledge() then return end
+      if not WG.HasCharacterKnowledge() then return end
       -- local Rules = WG.SV["Guild" .. GuildIndex]
       -- for _, Rule in ipairs(Rules) do
         -- if Rule.Type == WAREGUILD_STORE_UNKNOWN then return end
