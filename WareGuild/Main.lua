@@ -663,9 +663,9 @@ end
 
 local function StoreDeposit(Target)
   if Target.Remaining <= 0 then
-    if Target.Borrowed then
-      d("[WareGuild] " .. zo_strformat(WG.Lang.CHAT_REGROUP_DONE, Target.ItemLink, Target.DepositTotal))
-    end
+    -- if Target.Borrowed then
+      -- d("[WareGuild] " .. zo_strformat(WG.Lang.CHAT_REGROUP_DONE, Target.ItemLink, Target.DepositTotal))
+    -- end
     WG.GuildBankQueue(true) return
   end
   local Slots = DepositSlots(Target, 1)
@@ -765,7 +765,7 @@ local function BeginDeposit(Target)
     if #BagSlots == 0 then StoreDeposit(Target) return end
     if BagSlots.Total < Target.Count then StoreDeposit(Target) return end
     if #BankSlots == 0 then
-      ReportRegroupMismatch(Target)
+      --ReportRegroupMismatch(Target)
       StoreDeposit(Target)
       return
     end
@@ -783,8 +783,8 @@ local function BeginDeposit(Target)
     end
     Target.Withdrawals, Target.WithdrawIndex = BankSlots, 1
     Target.DepositTotal = Target.Count + BankSlots.Total
-    d("[WareGuild] " .. zo_strformat(WG.Lang.CHAT_REGROUP_BORROW, Target.ItemLink,
-      #BankSlots, BankSlots.Total))
+    --d("[WareGuild] " .. zo_strformat(WG.Lang.CHAT_REGROUP_BORROW, Target.ItemLink,
+      --#BankSlots, BankSlots.Total))
     WithdrawDeposit(Target)
   end)
 end

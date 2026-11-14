@@ -79,19 +79,19 @@ WG.Lang = {
   ["SETTING_CHARACTER_CONFIG"] = "Configuration par personnage",
   ["SETTING_CHARACTER_CONFIG_TOOLTIP"] = "Par défaut, utilise la configuration du compte",
   
-  ["SETTING_AUTO_OPEN_STORE"] = "Ouvrir automatiquement les banques de guilde pour le stockage",
+  ["SETTING_AUTO_OPEN_STORE"] = "Ouvrir automatiquement pour le stockage",
   ["SETTING_AUTO_OPEN_STORE_TOOLTIP"] = "Fonctionne uniquement quand WG trouve des objets à stocker.\r\nSans effet sur [Déposer jusqu'à x]", -- \r\n Line Feed
   
-  ["SETTING_AUTO_OPEN_WRITS"] = "Ouvrir automatiquement les banques de guilde pour les commandes journalières",
+  ["SETTING_AUTO_OPEN_WRITS"] = "Ouvrir automatiquement pour les commandes journalières",
   ["SETTING_AUTO_OPEN_WRITS_TOOLTIP"] = "Fonctionne uniquement quand l'étape [Retirer pour commandes journalières] existe et que vous avez des commandes journalières",
   
-  ["SETTING_AUTO_CLOSE"] = "Fermer automatiquement les banques de guilde",
+  ["SETTING_AUTO_CLOSE"] = "Fermer automatiquement",
   ["SETTING_AUTO_CLOSE_TOOLTIP"] = "Fonctionne uniquement après que WG a réellement déplacé des objets",
   
   ["SETTING_STEPS_LOG"] = "Afficher le journal des opérations",
   ["SETTING_STEPS_LOG_TOOLTIP"] = "Affiche dans la fenêtre de discussion ce que WG a réellement fait à chaque étape",
   
-  ["SETTING_BAN_STORE_WRITS"] = "Désactiver les dépôts quand des commandes journalières sont actives",
+  ["SETTING_BAN_STORE_WRITS"] = "Désactiver les dépôts si commandes journalières active",
   ["SETTING_BAN_STORE_WRITS_TOOLTIP"] = "Si vous utilisez les banques de guilde pour les commandes journalières, activez cette option",
   
   ["SETTING_IGNORE_INVENTORY"] = "[Retirer pour commandes journalières] Ignorer l'inventaire",
@@ -115,7 +115,7 @@ WG.Lang = {
   ["SETTING_HEADER_SELECT_GUILD"] = "Sélectionner les banques de guilde",
   ["SETTING_GUILD_TIPS"] = "Astuces :\r\nTraitement dans l'ordre, assurez-vous d'avoir accès aux banques de guilde\r\nL'interface doit être rechargée après avoir rejoint une nouvelle guilde", -- \r\n Line Feed
   
-  ["GUILD_ITEM_SCROLL"] = "Sélectionner un objet du sac à dos pour créer des étapes",
+  ["GUILD_ITEM_SCROLL"] = "objet du sac à dos pour créer des étapes",
   
   ["GUILD_FUZZY"] = "Correspondance approximative",
   ["GUILD_FUZZY_TOOLTIP"] = "Correspondance par lien d'objet ou ItemId (mode approximatif). Activation déconseillée",
@@ -141,7 +141,7 @@ WG.Lang = {
   ["GUILD_STEPS_EMPTY"] = "Étapes vides",
   ["GUILD_STEPS_DELETE"] = "Supprimer l'étape sélectionnée",
   
-  ["CLIP"] = "Presse-papiers",
+  ["CLIP"] = "Copier/Coller",
   ["CLIP_PASTE"] = "Coller",
   
   ["SETTING_BOTTOM_TIPS"] = "Il est recommandé de lire les instructions détaillées de WG sur ESOUI",

@@ -340,7 +340,7 @@ function WG.BuildMenu()
 		name = function() return GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 1 > "..GetGuildName(WG.SV.Guild[1] or 0) end,
     disabled = function() if WG.SV.Guild[1] then return false else return true end end,
 		controls = {
-        KnowledgeDepositButton(1),
+        
         { --Item Scroll
         type = "dropdown",
         name = WG.Lang.GUILD_ITEM_SCROLL, 
@@ -375,6 +375,7 @@ function WG.BuildMenu()
         end,
         width = "half",	
         },
+        KnowledgeDepositButton(1),
         { --Withdraw all
         type = "button",
         name = WG.Lang.GUILD_TAKE_ALL,
@@ -529,7 +530,7 @@ function WG.BuildMenu()
 		name = function() return GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 2 > "..GetGuildName(WG.SV.Guild[2] or 0) end,
     disabled = function() if WG.SV.Guild[2] then return false else return true end end,
 		controls = {
-        KnowledgeDepositButton(2),
+        
         { --Item Scroll
         type = "dropdown",
         name = WG.Lang.GUILD_ITEM_SCROLL, 
@@ -564,6 +565,7 @@ function WG.BuildMenu()
         end,
         width = "half",	
         },
+        KnowledgeDepositButton(2),
         { --Withdraw all
         type = "button",
         name = WG.Lang.GUILD_TAKE_ALL,
@@ -718,7 +720,7 @@ function WG.BuildMenu()
 		name = function() return GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 3 > "..GetGuildName(WG.SV.Guild[3] or 0) end,
     disabled = function() if WG.SV.Guild[3] then return false else return true end end,
 		controls = {
-        KnowledgeDepositButton(3),
+        
         { --Item Scroll
         type = "dropdown",
         name = WG.Lang.GUILD_ITEM_SCROLL,
@@ -753,6 +755,7 @@ function WG.BuildMenu()
         end,
         width = "half",	
         },
+        KnowledgeDepositButton(3),
         { --Withdraw all
         type = "button",
         name = WG.Lang.GUILD_TAKE_ALL,
@@ -907,7 +910,7 @@ function WG.BuildMenu()
 		name = function() return GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 4 > "..GetGuildName(WG.SV.Guild[4] or 0) end,
     disabled = function() if WG.SV.Guild[4] then return false else return true end end,
 		controls = {
-        KnowledgeDepositButton(4),
+        
         { --Item Scroll
         type = "dropdown",
         name = WG.Lang.GUILD_ITEM_SCROLL, 
@@ -942,6 +945,7 @@ function WG.BuildMenu()
         end,
         width = "half",	
         },
+        KnowledgeDepositButton(4),
         { --Withdraw all
         type = "button",
         name = WG.Lang.GUILD_TAKE_ALL,
@@ -1096,7 +1100,7 @@ function WG.BuildMenu()
 		name = function() return GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 5 > "..GetGuildName(WG.SV.Guild[5] or 0) end,
     disabled = function() if WG.SV.Guild[5] then return false else return true end end,
 		controls = {
-        KnowledgeDepositButton(5),
+        
         { --Item Scroll
         type = "dropdown",
         name = WG.Lang.GUILD_ITEM_SCROLL, 
@@ -1131,6 +1135,7 @@ function WG.BuildMenu()
         end,
         width = "half",	
         },
+        KnowledgeDepositButton(5),
         { --Withdraw all
         type = "button",
         name = WG.Lang.GUILD_TAKE_ALL,
