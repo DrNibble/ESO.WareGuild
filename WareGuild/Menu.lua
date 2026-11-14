@@ -15,24 +15,24 @@ for GuildIndex = 1, 5 do
     TakeTo = 0, StoreTo = 0, Line = 1}
 end
 local ClipGuild, ClipSteps = false, {}
-local function KnowledgeDepositButton(GuildIndex)
-  return {
-    type = "button",
-    name = WG.Lang.GUILD_STORE_UNKNOWN,
-    tooltip = WG.Lang.GUILD_STORE_UNKNOWN_TOOLTIP,
-    disabled = function() return not WG.HasCharacterKnowledge() end,
-    func = function()
-      local GuildId = WG.SV.Guild[GuildIndex]
-      if not GuildId or not WG.HasCharacterKnowledge() then return end
-      local Rules = WG.SV["Guild" .. GuildIndex]
-      for _, Rule in ipairs(Rules) do
-        if Rule.Type == WAREGUILD_STORE_UNKNOWN then return end
-      end
-      table.insert(Rules, {GuildId = GuildId, Type = WAREGUILD_STORE_UNKNOWN})
-    end,
-    width = "full",
-  }
-end
+-- local function KnowledgeDepositButton(GuildIndex)
+  -- return {
+    -- type = "button",
+    -- name = WG.Lang.GUILD_STORE_UNKNOWN,
+    -- tooltip = WG.Lang.GUILD_STORE_UNKNOWN_TOOLTIP,
+    -- disabled = function() return not WG.HasCharacterKnowledge() end,
+    -- func = function()
+      -- local GuildId = WG.SV.Guild[GuildIndex]
+      -- if not GuildId or not WG.HasCharacterKnowledge() then return end
+      -- local Rules = WG.SV["Guild" .. GuildIndex]
+      -- for _, Rule in ipairs(Rules) do
+        -- if Rule.Type == WAREGUILD_STORE_UNKNOWN then return end
+      -- end
+      -- table.insert(Rules, {GuildId = GuildId, Type = WAREGUILD_STORE_UNKNOWN})
+    -- end,
+    -- width = "full",
+  -- }
+-- end
 local MaterialChoices = {
   "/", 
   WG.Lang.BLACKSMITH, 
@@ -199,7 +199,23 @@ local function GuildRules(GuildIndex)
       setFunc = function(var) State.Fuzzy = var end,
       width = "half",
       },
-      KnowledgeDepositButton(GuildIndex),
+      {
+    type = "button",
+    name = WG.Lang.GUILD_STORE_UNKNOWN,
+    tooltip = WG.Lang.GUILD_STORE_UNKNOWN_TOOLTIP,
+    disabled = function() return not WG.HasCharacterKnowledge() end,
+    func = function()
+      -- local GuildId = WG.SV.Guild[GuildIndex]
+      -- if not GuildId or not WG.HasCharacterKnowledge() then return end
+      -- local Rules = WG.SV["Guild" .. GuildIndex]
+      -- for _, Rule in ipairs(Rules) do
+        -- if Rule.Type == WAREGUILD_STORE_UNKNOWN then return end
+      -- end
+      ItemStep(GuildIndex, State, WAREGUILD_STORE_UNKNOWN)
+      --table.insert(Rules, {GuildId = GuildId, Type = WAREGUILD_STORE_UNKNOWN})
+    end,
+    width = "full",
+  },
       { --UpdateList
       type = "button",
       name = WG.Lang.GUILD_UPDATE_ITEM_LIST,
