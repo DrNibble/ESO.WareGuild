@@ -4,10 +4,16 @@ local LAM = LibAddonMenu2
 ---------------------
 ----Tool Function----
 ---------------------
-local GuildD1A, GuildD1B, GuildD2A, GuildD2B, GuildD3A, GuildD3B, GuildD4A, GuildD4B, GuildD5A, GuildD5B
-local GuildFuzzy1, GuildFuzzy2, GuildFuzzy3, GuildFuzzy4, GuildFuzzy5 = false, false, false, false, false
-local GuildS1A, GuildS1B, GuildS2A, GuildS2B, GuildS3A, GuildS3B, GuildS4A, GuildS4B, GuildS5A, GuildS5B = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-local GuildS1C, GuildS2C, GuildS3C, GuildS4C, GuildS5C = 1, 1, 1, 1, 1
+--Transient menu state of each of the five guild bank slots. Only the
+--guild index differs between the five sections, so the controls are
+--built by GuildSelector/GuildRules below instead of being copied.
+--Item: selected item link; Material: selected store type; Fuzzy;
+--TakeTo/StoreTo: slider values; Line: selected rule line.
+local GuildState = {}
+for GuildIndex = 1, 5 do
+  GuildState[GuildIndex] = {Item = nil, Material = nil, Fuzzy = false,
+    TakeTo = 0, StoreTo = 0, Line = 1}
+end
 local ClipGuild, ClipSteps = false, {}
 local function KnowledgeDepositButton(GuildIndex)
   return {
@@ -117,6 +123,227 @@ local function CopySteps(GuildId, StepsTable)
     table.insert(Tep, Step)
   end
   return Tep
+end
+
+--Insert one rule (step) into the rule list of guild bank GuildIndex.
+local function InsertStep(GuildIndex, Step)
+  Step["GuildId"] = WG.SV.Guild[GuildIndex]
+  table.insert(WG.SV["Guild" .. GuildIndex], Step)
+end
+
+--One item rule (step) built from the menu state: fuzzy rules match the
+--ItemId, plain rules keep the whole item link. Count is optional.
+local function ItemStep(GuildIndex, State, RuleType, Count)
+  local Step = {["Type"] = RuleType}
+  if Count then Step["Count"] = Count end
+  if State.Fuzzy then
+    Step["ItemId"] = GetItemLinkItemId(State.Item)
+  else
+    Step["ItemLink"] = State.Item
+  end
+  return InsertStep(GuildIndex, Step)
+end
+
+--Dropdown assigning a guild to guild bank slot GuildIndex. Changing the
+--guild empties the rule list, as before.
+local function GuildSelector(GuildIndex)
+  return {
+    type = "dropdown",
+    name = GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER) .. " " .. GuildIndex,
+    choices = GuildList(),
+    choicesValues = select(2, GuildList()),
+    scrollable = true,
+    getFunc = function() if WG.SV.Guild[GuildIndex] then return WG.SV.Guild[GuildIndex] else return false end end,
+    setFunc = function(var)
+      if WG.SV.Guild[GuildIndex] ~= var then
+        WG.SV.Guild[GuildIndex] = var
+        WG.SV["Guild" .. GuildIndex] = {}
+      end
+    end,
+    width = "full",
+  }
+end
+
+--Submenu with the deposit/withdraw rules of guild bank GuildIndex:
+--item selection, fuzzy toggle, withdraw/store (all or up to a count),
+--craft materials, daily writs, and the rule list editor. Identical for
+--the five guilds; only the index (and the saved rule list) differs.
+local function GuildRules(GuildIndex)
+  local State = GuildState[GuildIndex]
+  return {
+    type = "submenu",
+    name = function() return GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER) .. " " .. GuildIndex .. " > " .. GetGuildName(WG.SV.Guild[GuildIndex] or 0) end,
+    disabled = function() if WG.SV.Guild[GuildIndex] then return false else return true end end,
+    controls = {
+      { --Item Scroll
+      type = "dropdown",
+      name = WG.Lang.GUILD_ITEM_SCROLL,
+      choices = ItemList(),
+      scrollable = true,
+      getFunc = function() if State.Item then return State.Item else return "/" end end,
+      setFunc = function(var)
+        if var ~= "/" then
+          State.Item = var
+        else
+          State.Item = nil
+        end
+      end,
+      reference = "WG_Guild_" .. GuildIndex .. "_Item",
+      width = "full",
+      },
+      { --Fuzzy
+      type = "checkbox",
+      name = WG.Lang.GUILD_FUZZY,
+      tooltip = WG.Lang.GUILD_FUZZY_TOOLTIP,
+      getFunc = function() return State.Fuzzy end,
+      setFunc = function(var) State.Fuzzy = var end,
+      width = "half",
+      },
+      KnowledgeDepositButton(GuildIndex),
+      { --UpdateList
+      type = "button",
+      name = WG.Lang.GUILD_UPDATE_ITEM_LIST,
+      func = function()
+        State.Item = nil
+        local Control = _G["WG_Guild_" .. GuildIndex .. "_Item"]
+        Control.data.choices = ItemList()
+        Control:UpdateChoices()
+      end,
+      width = "half",
+      },
+      { --Withdraw all
+      type = "button",
+      name = WG.Lang.GUILD_TAKE_ALL,
+      func = function()
+        if not State.Item then return end
+        ItemStep(GuildIndex, State, WAREGUILD_TAKE_ALL)
+      end,
+      width = "half",
+      },
+      { --Store All
+      type = "button",
+      name = WG.Lang.GUILD_STORE_ALL,
+      func = function()
+        if not State.Item then return end
+        ItemStep(GuildIndex, State, WAREGUILD_STORE_ALL)
+      end,
+      width = "half",
+      },
+      { --TakeTo
+      type = "slider",
+      name = WG.Lang.GUILD_TAKE_TO_SLIDER,
+      getFunc = function() return 0 end,
+      setFunc = function(var) State.TakeTo = var end,
+      min = 0,
+      max = 10000,
+      step = 1,
+      width = "half",
+      },
+      {
+      type = "button",
+      name = WG.Lang.GUILD_TAKE_TO,
+      func = function()
+        if not State.Item then return end
+        ItemStep(GuildIndex, State, WAREGUILD_TAKE_TO, State.TakeTo)
+      end,
+      width = "half",
+      },
+      { --StoreTo
+      type = "slider",
+      name = WG.Lang.GUILD_STORE_TO_SLIDER,
+      getFunc = function() return 0 end,
+      setFunc = function(var) State.StoreTo = var end,
+      min = 0,
+      max = 10000,
+      step = 1,
+      width = "half",
+      },
+      {
+      type = "button",
+      name = WG.Lang.GUILD_STORE_TO,
+      func = function()
+        if not State.Item then return end
+        ItemStep(GuildIndex, State, WAREGUILD_STORE_TO, State.StoreTo)
+      end,
+      width = "half",
+      },
+      {
+      type = "header",
+      name = GetString(SI_FURNITURETHEMETYPE1),
+      },
+      { --Store Craft Materials
+      type = "dropdown",
+      name = WG.Lang.GUILD_STORE_ALL_TYPE_DROP,
+      choices = MaterialChoices,
+      choicesValues = MaterialChoicesValue,
+      scrollable = true,
+      getFunc = function() return "/" end,
+      setFunc = function(var)
+        if var ~= "/" then
+          State.Material = var
+        else
+          State.Material = nil
+        end
+      end,
+      width = "full",
+      },
+      { --Withdraw for Daily Writs
+      type = "button",
+      name = WG.Lang.GUILD_TAKE_WRITS,
+      tooltip = WG.Lang.GUILD_TAKE_WRITS_TOOLTIP,
+      func = function()
+        InsertStep(GuildIndex, {["Type"] = WAREGUILD_DAILY})
+      end,
+      width = "half",
+      },
+      {
+      type = "button",
+      name = WG.Lang.GUILD_STORE_ALL_TYPE,
+      func = function()
+        if not State.Material then return end
+        InsertStep(GuildIndex, {["Type"] = State.Material})
+      end,
+      width = "half",
+      },
+      {
+      type = "header",
+      name = WG.Lang.GUILD_HEADER_STEPS,
+      },
+      { --Rules Display
+      type = "description",
+      title = GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER) .. " " .. GuildIndex .. " > ",
+      text = function() return Desc(WG.SV["Guild" .. GuildIndex]) end,
+      width = "full",
+      enableLinks = true,
+      },
+      { --Which Line
+      type = "slider",
+      name = WG.Lang.GUILD_STEPS_SLIDER,
+      getFunc = function() return 1 end,
+      setFunc = function(var) State.Line = var end,
+      min = 1,
+      max = 1000,
+      step = 1,
+      width = "full",
+      },
+      { --Empty Rule
+      type = "button",
+      name = WG.Lang.GUILD_STEPS_EMPTY,
+      func = function()
+        WG.SV["Guild" .. GuildIndex] = {}
+      end,
+      width = "half",
+      },
+      { --Delete Rule
+      type = "button",
+      name = WG.Lang.GUILD_STEPS_DELETE,
+      func = function()
+        table.remove(WG.SV["Guild" .. GuildIndex], State.Line)
+      end,
+      width = "half",
+      },
+    },
+  }
 end
 
 ------------
@@ -259,1032 +486,16 @@ function WG.BuildMenu()
 		type = "description",
 		title = WG.Lang.SETTING_GUILD_TIPS,
     },
-    { --Guild 1
-    type = "dropdown",
-    name = GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 1",
-    choices = GuildList(),
-    choicesValues = select(2, GuildList()),
-    scrollable = true,
-    getFunc = function() if WG.SV.Guild[1] then return WG.SV.Guild[1] else return false end end,
-    setFunc = function(var)
-      if WG.SV.Guild[1] ~= var then
-        WG.SV.Guild[1] = var
-        WG.SV.Guild1 = {}
-      end
-    end,
-    width = "full",
-    },
-    { --Guild 2
-    type = "dropdown",
-    name = GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 2", 
-    choices = GuildList(),
-    choicesValues = select(2, GuildList()),
-    scrollable = true,
-    getFunc = function() if WG.SV.Guild[2] then return WG.SV.Guild[2] else return false end end,
-    setFunc = function(var)
-      if WG.SV.Guild[2] ~= var then
-        WG.SV.Guild[2] = var
-        WG.SV.Guild2 = {}
-      end
-    end,
-    width = "full",
-    },
-    { --Guild 3
-    type = "dropdown",
-    name = GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 3", 
-    choices = GuildList(),
-    choicesValues = select(2, GuildList()),
-    scrollable = true,
-    getFunc = function() if WG.SV.Guild[3] then return WG.SV.Guild[3] else return false end end,
-    setFunc = function(var)
-      if WG.SV.Guild[3] ~= var then
-        WG.SV.Guild[3] = var
-        WG.SV.Guild3 = {}
-      end
-    end,
-    width = "full",
-    },
-    { --Guild 4
-    type = "dropdown",
-    name = GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 4", 
-    choices = GuildList(),
-    choicesValues = select(2, GuildList()),
-    scrollable = true,
-    getFunc = function() if WG.SV.Guild[4] then return WG.SV.Guild[4] else return false end end,
-    setFunc = function(var)
-      if WG.SV.Guild[4] ~= var then
-        WG.SV.Guild[4] = var
-        WG.SV.Guild4 = {}
-      end
-    end,
-    width = "full",
-    },
-    { --Guild 5
-    type = "dropdown",
-    name = GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 5", 
-    choices = GuildList(),
-    choicesValues = select(2, GuildList()),
-    scrollable = true,
-    getFunc = function() if WG.SV.Guild[5] then return WG.SV.Guild[5] else return false end end,
-    setFunc = function(var)
-      if WG.SV.Guild[5] ~= var then
-        WG.SV.Guild[5] = var
-        WG.SV.Guild5 = {}
-      end
-    end,
-    width = "full",
-    },
-    
-    { --Guild Rule 1
-    type = "submenu",
-		name = function() return GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 1 > "..GetGuildName(WG.SV.Guild[1] or 0) end,
-    disabled = function() if WG.SV.Guild[1] then return false else return true end end,
-		controls = {
-        
-        { --Item Scroll
-        type = "dropdown",
-        name = WG.Lang.GUILD_ITEM_SCROLL, 
-        choices = ItemList(),
-        scrollable = true,
-        getFunc = function() if GuildD1A then return GuildD1A else return "/" end end,
-        setFunc = function(var) 
-          if var ~= "/" then 
-            GuildD1A = var
-          else 
-            GuildD1A = nil
-          end
-        end,
-        reference = "WG_Guild_1_Item",
-        width = "full",
-        },
-        { --Fuzzy
-        type = "checkbox",
-        name = WG.Lang.GUILD_FUZZY,
-        tooltip = WG.Lang.GUILD_FUZZY_TOOLTIP,
-        getFunc = function() return GuildFuzzy1 end,
-        setFunc = function(var) GuildFuzzy1 = var end,
-        width = "half",
-        },
-        { --UpdateList
-        type = "button",
-        name = WG.Lang.GUILD_UPDATE_ITEM_LIST,
-        func = function()
-          GuildD1A = nil
-          WG_Guild_1_Item.data.choices = ItemList()
-          WG_Guild_1_Item:UpdateChoices()
-        end,
-        width = "half",	
-        },
-        KnowledgeDepositButton(1),
-        { --Withdraw all
-        type = "button",
-        name = WG.Lang.GUILD_TAKE_ALL,
-        func = function()
-          if not GuildD1A then return end
-          if GuildFuzzy1 then
-            table.insert(WG.SV.Guild1, {["GuildId"] = WG.SV.Guild[1], ["Type"] = WAREGUILD_TAKE_ALL, ["ItemId"] = GetItemLinkItemId(GuildD1A)})
-          else
-            table.insert(WG.SV.Guild1, {["GuildId"] = WG.SV.Guild[1], ["Type"] = WAREGUILD_TAKE_ALL, ["ItemLink"] = GuildD1A})
-          end
-        end,
-        width = "half",	
-        },
-        { --Store All
-        type = "button",
-        name = WG.Lang.GUILD_STORE_ALL,
-        func = function()
-          if not GuildD1A then return end
-          if GuildFuzzy1 then
-            table.insert(WG.SV.Guild1, {["GuildId"] = WG.SV.Guild[1], ["Type"] = WAREGUILD_STORE_ALL, ["ItemId"] = GetItemLinkItemId(GuildD1A)})
-          else
-            table.insert(WG.SV.Guild1, {["GuildId"] = WG.SV.Guild[1], ["Type"] = WAREGUILD_STORE_ALL, ["ItemLink"] = GuildD1A})
-          end
-        end,
-        width = "half",	
-        },
-        { --TakeTo
-        type = "slider",
-        name = WG.Lang.GUILD_TAKE_TO_SLIDER,
-        getFunc = function() return 0 end,
-        setFunc = function(var) GuildS1A = var end,
-        min = 0,
-        max = 10000,
-        step = 1,
-        width = "half",
-        },
-        { 
-        type = "button",
-        name = WG.Lang.GUILD_TAKE_TO,
-        func = function()
-          if not GuildD1A then return end
-          if GuildFuzzy1 then
-            table.insert(WG.SV.Guild1, {["GuildId"] = WG.SV.Guild[1], ["Type"] = WAREGUILD_TAKE_TO, ["Count"] = GuildS1A, ["ItemId"] = GetItemLinkItemId(GuildD1A)})
-          else
-            table.insert(WG.SV.Guild1, {["GuildId"] = WG.SV.Guild[1], ["Type"] = WAREGUILD_TAKE_TO, ["Count"] = GuildS1A, ["ItemLink"] = GuildD1A})
-          end
-        end,
-        width = "half",	
-        },
-        { --StoreTo
-        type = "slider",
-        name = WG.Lang.GUILD_STORE_TO_SLIDER,
-        getFunc = function() return 0 end,
-        setFunc = function(var) GuildS1B = var end,
-        min = 0,
-        max = 10000,
-        step = 1,
-        width = "half",
-        },
-        { 
-        type = "button",
-        name = WG.Lang.GUILD_STORE_TO,
-        func = function()
-          if not GuildD1A then return end
-          if GuildFuzzy1 then
-            table.insert(WG.SV.Guild1, {["GuildId"] = WG.SV.Guild[1], ["Type"] = WAREGUILD_STORE_TO, ["Count"] = GuildS1B, ["ItemId"] = GetItemLinkItemId(GuildD1A)})
-          else
-            table.insert(WG.SV.Guild1, {["GuildId"] = WG.SV.Guild[1], ["Type"] = WAREGUILD_STORE_TO, ["Count"] = GuildS1B, ["ItemLink"] = GuildD1A})
-          end
-        end,
-        width = "half",	
-        },
-        {
-        type = "header",
-        name = GetString(SI_FURNITURETHEMETYPE1),
-        },
-        { --Store Craft Materials
-        type = "dropdown",
-        name = WG.Lang.GUILD_STORE_ALL_TYPE_DROP,
-        choices = MaterialChoices,
-        choicesValues = MaterialChoicesValue,
-        scrollable = true,
-        getFunc = function() return "/" end,
-        setFunc = function(var) 
-          if var ~= "/" then
-            GuildD1B = var
-          else
-            GuildD1B = nil
-          end
-        end,
-        width = "full",
-        },
-        { --Withdraw for Daily Writs
-        type = "button",
-        name = WG.Lang.GUILD_TAKE_WRITS,
-        tooltip = WG.Lang.GUILD_TAKE_WRITS_TOOLTIP,
-        func = function()
-          table.insert(WG.SV.Guild1, {["GuildId"] = WG.SV.Guild[1], ["Type"] = WAREGUILD_DAILY})
-        end,
-        width = "half",	
-        },
-        { 
-        type = "button",
-        name = WG.Lang.GUILD_STORE_ALL_TYPE,
-        func = function()
-          if not GuildD1B then return end
-          table.insert(WG.SV.Guild1, {["GuildId"] = WG.SV.Guild[1], ["Type"] = GuildD1B})
-        end,
-        width = "half",	
-        },
-        {
-        type = "header",
-        name = WG.Lang.GUILD_HEADER_STEPS,
-        },
-        { --Rules Display
-        type = "description",
-        title = GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 1 > ",
-        text = function() return Desc(WG.SV.Guild1) end,
-        width = "full",
-        enableLinks = true,
-        },
-        { --Which Line
-        type = "slider",
-        name = WG.Lang.GUILD_STEPS_SLIDER,
-        getFunc = function() return 1 end,
-        setFunc = function(var) GuildS1C = var end,
-        min = 1,
-        max = 1000,
-        step = 1,
-        width = "full",
-        },
-        { --Empty Rule
-        type = "button",
-        name = WG.Lang.GUILD_STEPS_EMPTY,
-        func = function()
-          WG.SV.Guild1 = {}
-        end,
-        width = "half",	
-        },
-        { --Delete Rule
-        type = "button",
-        name = WG.Lang.GUILD_STEPS_DELETE,
-        func = function()
-          table.remove(WG.SV.Guild1, GuildS1C)
-        end,
-        width = "half",	
-        },
-      },
-    },
-    { --Guild Rule 2
-    type = "submenu",
-		name = function() return GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 2 > "..GetGuildName(WG.SV.Guild[2] or 0) end,
-    disabled = function() if WG.SV.Guild[2] then return false else return true end end,
-		controls = {
-        
-        { --Item Scroll
-        type = "dropdown",
-        name = WG.Lang.GUILD_ITEM_SCROLL, 
-        choices = ItemList(),
-        scrollable = true,
-        getFunc = function() if GuildD2A then return GuildD2A else return "/" end end,
-        setFunc = function(var) 
-          if var ~= "/" then 
-            GuildD2A = var
-          else 
-            GuildD2A = nil
-          end
-        end,
-        reference = "WG_Guild_2_Item",
-        width = "full",
-        },
-        { --Fuzzy
-        type = "checkbox",
-        name = WG.Lang.GUILD_FUZZY,
-        tooltip = WG.Lang.GUILD_FUZZY_TOOLTIP,
-        getFunc = function() return GuildFuzzy2 end,
-        setFunc = function(var) GuildFuzzy2 = var end,
-        width = "half",
-        },
-        { --UpdateList
-        type = "button",
-        name = WG.Lang.GUILD_UPDATE_ITEM_LIST,
-        func = function()
-          GuildD2A = nil
-          WG_Guild_2_Item.data.choices = ItemList()
-          WG_Guild_2_Item:UpdateChoices()
-        end,
-        width = "half",	
-        },
-        KnowledgeDepositButton(2),
-        { --Withdraw all
-        type = "button",
-        name = WG.Lang.GUILD_TAKE_ALL,
-        func = function()
-          if not GuildD2A then return end
-          if GuildFuzzy2 then
-            table.insert(WG.SV.Guild2, {["GuildId"] = WG.SV.Guild[2], ["Type"] = WAREGUILD_TAKE_ALL, ["ItemId"] = GetItemLinkItemId(GuildD2A)})
-          else
-            table.insert(WG.SV.Guild2, {["GuildId"] = WG.SV.Guild[2], ["Type"] = WAREGUILD_TAKE_ALL, ["ItemLink"] = GuildD2A})
-          end
-        end,
-        width = "half",
-        },
-        { --Store All
-        type = "button",
-        name = WG.Lang.GUILD_STORE_ALL,
-        func = function()
-          if not GuildD2A then return end
-          if GuildFuzzy2 then
-            table.insert(WG.SV.Guild2, {["GuildId"] = WG.SV.Guild[2], ["Type"] = WAREGUILD_STORE_ALL, ["ItemId"] = GetItemLinkItemId(GuildD2A)})
-          else
-            table.insert(WG.SV.Guild2, {["GuildId"] = WG.SV.Guild[2], ["Type"] = WAREGUILD_STORE_ALL, ["ItemLink"] = GuildD2A})
-          end
-        end,
-        width = "half",	
-        },
-        { --TakeTo
-        type = "slider",
-        name = WG.Lang.GUILD_TAKE_TO_SLIDER,
-        getFunc = function() return 0 end,
-        setFunc = function(var) GuildS2A = var end,
-        min = 0,
-        max = 10000,
-        step = 1,
-        width = "half",
-        },
-        { 
-        type = "button",
-        name = WG.Lang.GUILD_TAKE_TO,
-        func = function()
-          if not GuildD2A then return end
-          if GuildFuzzy2 then
-            table.insert(WG.SV.Guild2, {["GuildId"] = WG.SV.Guild[2], ["Type"] = WAREGUILD_TAKE_TO, ["Count"] = GuildS2A, ["ItemId"] = GetItemLinkItemId(GuildD2A)})
-          else
-            table.insert(WG.SV.Guild2, {["GuildId"] = WG.SV.Guild[2], ["Type"] = WAREGUILD_TAKE_TO, ["Count"] = GuildS2A, ["ItemLink"] = GuildD2A})
-          end
-        end,
-        width = "half",	
-        },
-        { --StoreTo
-        type = "slider",
-        name = WG.Lang.GUILD_STORE_TO_SLIDER,
-        getFunc = function() return 0 end,
-        setFunc = function(var) GuildS2B = var end,
-        min = 0,
-        max = 10000,
-        step = 1,
-        width = "half",
-        },
-        { 
-        type = "button",
-        name = WG.Lang.GUILD_STORE_TO,
-        func = function()
-          if not GuildD2A then return end
-          if GuildFuzzy2 then
-            table.insert(WG.SV.Guild2, {["GuildId"] = WG.SV.Guild[2], ["Type"] = WAREGUILD_STORE_TO, ["Count"] = GuildS2B, ["ItemId"] = GetItemLinkItemId(GuildD2A)})
-          else
-            table.insert(WG.SV.Guild2, {["GuildId"] = WG.SV.Guild[2], ["Type"] = WAREGUILD_STORE_TO, ["Count"] = GuildS2B, ["ItemLink"] = GuildD2A})
-          end
-        end,
-        width = "half",	
-        },
-        {
-        type = "header",
-        name = GetString(SI_FURNITURETHEMETYPE1),
-        },
-        { --Store Craft Materials
-        type = "dropdown",
-        name = WG.Lang.GUILD_STORE_ALL_TYPE_DROP, 
-        choices = MaterialChoices,
-        choicesValues = MaterialChoicesValue,
-        scrollable = true,
-        getFunc = function() return "/" end,
-        setFunc = function(var) 
-          if var ~= "/" then
-            GuildD2B = var
-          else
-            GuildD2B = nil
-          end
-        end,
-        width = "full",
-        },
-        { --Withdraw for Daily Writs
-        type = "button",
-        name = WG.Lang.GUILD_TAKE_WRITS,
-        tooltip = WG.Lang.GUILD_TAKE_WRITS_TOOLTIP,
-        func = function()
-          table.insert(WG.SV.Guild2, {["GuildId"] = WG.SV.Guild[2], ["Type"] = WAREGUILD_DAILY})
-        end,
-        width = "half",	
-        },
-        { 
-        type = "button",
-        name = WG.Lang.GUILD_STORE_ALL_TYPE,
-        func = function()
-          if not GuildD2B then return end
-          table.insert(WG.SV.Guild2, {["GuildId"] = WG.SV.Guild[2], ["Type"] = GuildD2B})
-        end,
-        width = "half",	
-        },
-        {
-        type = "header",
-        name = WG.Lang.GUILD_HEADER_STEPS,
-        },
-        { --Rules Display
-        type = "description",
-        title = GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 2 > ",
-        text = function() return Desc(WG.SV.Guild2) end,
-        width = "full",
-        enableLinks = true,
-        },
-        { --Which Line
-        type = "slider",
-        name = WG.Lang.GUILD_STEPS_SLIDER,
-        getFunc = function() return 1 end,
-        setFunc = function(var) GuildS2C = var end,
-        min = 1,
-        max = 1000,
-        step = 1,
-        width = "full",
-        },
-        { --Empty Rule
-        type = "button",
-        name = WG.Lang.GUILD_STEPS_EMPTY,
-        func = function()
-          WG.SV.Guild2 = {}
-        end,
-        width = "half",	
-        },
-        { --Delete Rule
-        type = "button",
-        name = WG.Lang.GUILD_STEPS_DELETE,
-        func = function()
-          table.remove(WG.SV.Guild2, GuildS2C)
-        end,
-        width = "half",	
-        },
-      },
-    },
-    { --Guild Rule 3
-    type = "submenu",
-		name = function() return GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 3 > "..GetGuildName(WG.SV.Guild[3] or 0) end,
-    disabled = function() if WG.SV.Guild[3] then return false else return true end end,
-		controls = {
-        
-        { --Item Scroll
-        type = "dropdown",
-        name = WG.Lang.GUILD_ITEM_SCROLL,
-        choices = ItemList(),
-        scrollable = true,
-        getFunc = function() if GuildD3A then return GuildD3A else return "/" end end,
-        setFunc = function(var) 
-          if var ~= "/" then 
-            GuildD3A = var
-          else 
-            GuildD3A = nil
-          end
-        end,
-        reference = "WG_Guild_3_Item",
-        width = "full",
-        },
-        { --Fuzzy
-        type = "checkbox",
-        name = WG.Lang.GUILD_FUZZY,
-        tooltip = WG.Lang.GUILD_FUZZY_TOOLTIP,
-        getFunc = function() return GuildFuzzy3 end,
-        setFunc = function(var) GuildFuzzy3 = var end,
-        width = "half",
-        },
-        { --UpdateList
-        type = "button",
-        name = WG.Lang.GUILD_UPDATE_ITEM_LIST,
-        func = function()
-          GuildD3A = nil
-          WG_Guild_3_Item.data.choices = ItemList()
-          WG_Guild_3_Item:UpdateChoices()
-        end,
-        width = "half",	
-        },
-        KnowledgeDepositButton(3),
-        { --Withdraw all
-        type = "button",
-        name = WG.Lang.GUILD_TAKE_ALL,
-        func = function()
-          if not GuildD3A then return end
-          if GuildFuzzy3 then
-            table.insert(WG.SV.Guild3, {["GuildId"] = WG.SV.Guild[3], ["Type"] = WAREGUILD_TAKE_ALL, ["ItemId"] = GetItemLinkItemId(GuildD3A)})
-          else
-            table.insert(WG.SV.Guild3, {["GuildId"] = WG.SV.Guild[3], ["Type"] = WAREGUILD_TAKE_ALL, ["ItemLink"] = GuildD3A})
-          end
-        end,
-        width = "half",	
-        },
-        { --Store All
-        type = "button",
-        name = WG.Lang.GUILD_STORE_ALL,
-        func = function()
-          if not GuildD3A then return end
-          if GuildFuzzy3 then
-            table.insert(WG.SV.Guild3, {["GuildId"] = WG.SV.Guild[3], ["Type"] = WAREGUILD_STORE_ALL, ["ItemId"] = GetItemLinkItemId(GuildD3A)})
-          else
-            table.insert(WG.SV.Guild3, {["GuildId"] = WG.SV.Guild[3], ["Type"] = WAREGUILD_STORE_ALL, ["ItemLink"] = GuildD3A})
-          end
-        end,
-        width = "half",	
-        },
-        { --TakeTo
-        type = "slider",
-        name = WG.Lang.GUILD_TAKE_TO_SLIDER,
-        getFunc = function() return 0 end,
-        setFunc = function(var) GuildS3A = var end,
-        min = 0,
-        max = 10000,
-        step = 1,
-        width = "half",
-        },
-        { 
-        type = "button",
-        name = WG.Lang.GUILD_TAKE_TO,
-        func = function()
-          if not GuildD3A then return end
-          if GuildFuzzy3 then
-            table.insert(WG.SV.Guild3, {["GuildId"] = WG.SV.Guild[3], ["Type"] = WAREGUILD_TAKE_TO, ["Count"] = GuildS3A, ["ItemId"] = GetItemLinkItemId(GuildD3A)})
-          else
-            table.insert(WG.SV.Guild3, {["GuildId"] = WG.SV.Guild[3], ["Type"] = WAREGUILD_TAKE_TO, ["Count"] = GuildS3A, ["ItemLink"] = GuildD3A})
-          end
-        end,
-        width = "half",	
-        },
-        { --StoreTo
-        type = "slider",
-        name = WG.Lang.GUILD_STORE_TO_SLIDER,
-        getFunc = function() return 0 end,
-        setFunc = function(var) GuildS3B = var end,
-        min = 0,
-        max = 10000,
-        step = 1,
-        width = "half",
-        },
-        { 
-        type = "button",
-        name = WG.Lang.GUILD_STORE_TO,
-        func = function()
-          if not GuildD3A then return end
-          if GuildFuzzy3 then
-            table.insert(WG.SV.Guild3, {["GuildId"] = WG.SV.Guild[3], ["Type"] = WAREGUILD_STORE_TO, ["Count"] = GuildS3B, ["ItemId"] = GetItemLinkItemId(GuildD3A)})
-          else
-            table.insert(WG.SV.Guild3, {["GuildId"] = WG.SV.Guild[3], ["Type"] = WAREGUILD_STORE_TO, ["Count"] = GuildS3B, ["ItemLink"] = GuildD3A})
-          end
-        end,
-        width = "half",	
-        },
-        {
-        type = "header",
-        name = GetString(SI_FURNITURETHEMETYPE1),
-        },
-        { --Store Craft Materials
-        type = "dropdown",
-        name = WG.Lang.GUILD_STORE_ALL_TYPE_DROP, 
-        choices = MaterialChoices,
-        choicesValues = MaterialChoicesValue,
-        scrollable = true,
-        getFunc = function() return "/" end,
-        setFunc = function(var) 
-          if var ~= "/" then
-            GuildD3B = var
-          else
-            GuildD3B = nil
-          end
-        end,
-        width = "full",
-        },
-        { --Withdraw for Daily Writs
-        type = "button",
-        name = WG.Lang.GUILD_TAKE_WRITS,
-        tooltip = WG.Lang.GUILD_TAKE_WRITS_TOOLTIP,
-        func = function()
-          table.insert(WG.SV.Guild3, {["GuildId"] = WG.SV.Guild[3], ["Type"] = WAREGUILD_DAILY})
-        end,
-        width = "half",	
-        },
-        { 
-        type = "button",
-        name = WG.Lang.GUILD_STORE_ALL_TYPE,
-        func = function()
-          if not GuildD3B then return end
-          table.insert(WG.SV.Guild3, {["GuildId"] = WG.SV.Guild[3], ["Type"] = GuildD3B})
-        end,
-        width = "half",	
-        },
-        {
-        type = "header",
-        name = WG.Lang.GUILD_HEADER_STEPS,
-        },
-        { --Rules Display
-        type = "description",
-        title = GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 3 > ",
-        text = function() return Desc(WG.SV.Guild3) end,
-        width = "full",
-        enableLinks = true,
-        },
-        { --Which Line
-        type = "slider",
-        name = WG.Lang.GUILD_STEPS_SLIDER,
-        getFunc = function() return 1 end,
-        setFunc = function(var) GuildS3C = var end,
-        min = 1,
-        max = 1000,
-        step = 1,
-        width = "full",
-        },
-        { --Empty Rule
-        type = "button",
-        name = WG.Lang.GUILD_STEPS_EMPTY,
-        func = function()
-          WG.SV.Guild3 = {}
-        end,
-        width = "half", 
-        },
-        { --Delete Rule
-        type = "button",
-        name = WG.Lang.GUILD_STEPS_DELETE,
-        func = function()
-          table.remove(WG.SV.Guild3, GuildS3C)
-        end,
-        width = "half",	
-        },
-      },
-    },
-    { --Guild Rule 4
-    type = "submenu",
-		name = function() return GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 4 > "..GetGuildName(WG.SV.Guild[4] or 0) end,
-    disabled = function() if WG.SV.Guild[4] then return false else return true end end,
-		controls = {
-        
-        { --Item Scroll
-        type = "dropdown",
-        name = WG.Lang.GUILD_ITEM_SCROLL, 
-        choices = ItemList(),
-        scrollable = true,
-        getFunc = function() if GuildD4A then return GuildD4A else return "/" end end,
-        setFunc = function(var) 
-          if var ~= "/" then 
-            GuildD4A = var
-          else 
-            GuildD4A = nil
-          end
-        end,
-        reference = "WG_Guild_4_Item",
-        width = "full",
-        },
-        { --Fuzzy
-        type = "checkbox",
-        name = WG.Lang.GUILD_FUZZY,
-        tooltip = WG.Lang.GUILD_FUZZY_TOOLTIP,
-        getFunc = function() return GuildFuzzy4 end,
-        setFunc = function(var) GuildFuzzy4 = var end,
-        width = "half",
-        },
-        { --UpdateList
-        type = "button",
-        name = WG.Lang.GUILD_UPDATE_ITEM_LIST,
-        func = function()
-          GuildD4A = nil
-          WG_Guild_4_Item.data.choices = ItemList()
-          WG_Guild_4_Item:UpdateChoices()
-        end,
-        width = "half",	
-        },
-        KnowledgeDepositButton(4),
-        { --Withdraw all
-        type = "button",
-        name = WG.Lang.GUILD_TAKE_ALL,
-        func = function()
-          if not GuildD4A then return end
-          if GuildFuzzy4 then
-            table.insert(WG.SV.Guild4, {["GuildId"] = WG.SV.Guild[4], ["Type"] = WAREGUILD_TAKE_ALL, ["ItemId"] = GetItemLinkItemId(GuildD4A)})
-          else
-            table.insert(WG.SV.Guild4, {["GuildId"] = WG.SV.Guild[4], ["Type"] = WAREGUILD_TAKE_ALL, ["ItemLink"] = GuildD4A})
-          end
-        end,
-        width = "half",	
-        },
-        { --Store All
-        type = "button",
-        name = WG.Lang.GUILD_STORE_ALL,
-        func = function()
-          if not GuildD4A then return end
-          if GuildFuzzy4 then
-            table.insert(WG.SV.Guild4, {["GuildId"] = WG.SV.Guild[4], ["Type"] = WAREGUILD_STORE_ALL, ["ItemId"] = GetItemLinkItemId(GuildD4A)})
-          else
-            table.insert(WG.SV.Guild4, {["GuildId"] = WG.SV.Guild[4], ["Type"] = WAREGUILD_STORE_ALL, ["ItemLink"] = GuildD4A})
-          end
-        end,
-        width = "half",	
-        },
-        { --TakeTo
-        type = "slider",
-        name = WG.Lang.GUILD_TAKE_TO_SLIDER,
-        getFunc = function() return 0 end,
-        setFunc = function(var) GuildS4A = var end,
-        min = 0,
-        max = 10000,
-        step = 1,
-        width = "half",
-        },
-        { 
-        type = "button",
-        name = WG.Lang.GUILD_TAKE_TO,
-        func = function()
-          if not GuildD4A then return end
-          if GuildFuzzy4 then
-            table.insert(WG.SV.Guild4, {["GuildId"] = WG.SV.Guild[4], ["Type"] = WAREGUILD_TAKE_TO, ["Count"] = GuildS4A, ["ItemId"] = GetItemLinkItemId(GuildD4A)})
-          else
-            table.insert(WG.SV.Guild4, {["GuildId"] = WG.SV.Guild[4], ["Type"] = WAREGUILD_TAKE_TO, ["Count"] = GuildS4A, ["ItemLink"] = GuildD4A})
-          end
-        end,
-        width = "half",	
-        },
-        { --StoreTo
-        type = "slider",
-        name = WG.Lang.GUILD_STORE_TO_SLIDER,
-        getFunc = function() return 0 end,
-        setFunc = function(var) GuildS4B = var end,
-        min = 0,
-        max = 10000,
-        step = 1,
-        width = "half",
-        },
-        { 
-        type = "button",
-        name = WG.Lang.GUILD_STORE_TO,
-        func = function()
-          if not GuildD4A then return end
-          if GuildFuzzy4 then
-            table.insert(WG.SV.Guild4, {["GuildId"] = WG.SV.Guild[4], ["Type"] = WAREGUILD_STORE_TO, ["Count"] = GuildS4B, ["ItemId"] = GetItemLinkItemId(GuildD4A)})
-          else
-            table.insert(WG.SV.Guild4, {["GuildId"] = WG.SV.Guild[4], ["Type"] = WAREGUILD_STORE_TO, ["Count"] = GuildS4B, ["ItemLink"] = GuildD4A})
-          end
-        end,
-        width = "half",	
-        },
-        {
-        type = "header",
-        name = GetString(SI_FURNITURETHEMETYPE1),
-        },
-        { --Store Craft Materials
-        type = "dropdown",
-        name = WG.Lang.GUILD_STORE_ALL_TYPE_DROP, 
-        choices = MaterialChoices,
-        choicesValues = MaterialChoicesValue,
-        scrollable = true,
-        getFunc = function() return "/" end,
-        setFunc = function(var) 
-          if var ~= "/" then
-            GuildD4B = var
-          else
-            GuildD4B = nil
-          end
-        end,
-        width = "full",
-        },
-        { --Withdraw for Daily Writs
-        type = "button",
-        name = WG.Lang.GUILD_TAKE_WRITS,
-        tooltip = WG.Lang.GUILD_TAKE_WRITS_TOOLTIP,
-        func = function()
-          table.insert(WG.SV.Guild4, {["GuildId"] = WG.SV.Guild[4], ["Type"] = WAREGUILD_DAILY})
-        end,
-        width = "half",	
-        },
-        { 
-        type = "button",
-        name = WG.Lang.GUILD_STORE_ALL_TYPE,
-        func = function()
-          if not GuildD4B then return end
-          table.insert(WG.SV.Guild4, {["GuildId"] = WG.SV.Guild[4], ["Type"] = GuildD4B})
-        end,
-        width = "half",	
-        },
-        {
-        type = "header",
-        name = WG.Lang.GUILD_HEADER_STEPS,
-        },
-        { --Rules Display
-        type = "description",
-        title = GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 4 > ",
-        text = function() return Desc(WG.SV.Guild4) end,
-        width = "full",
-        enableLinks = true,
-        },
-        { --Which Line
-        type = "slider",
-        name = WG.Lang.GUILD_STEPS_SLIDER,
-        getFunc = function() return 1 end,
-        setFunc = function(var) GuildS4C = var end,
-        min = 1,
-        max = 1000,
-        step = 1,
-        width = "full",
-        },
-        { --Empty Rule
-        type = "button",
-        name = WG.Lang.GUILD_STEPS_EMPTY,
-        func = function()
-          WG.SV.Guild4 = {}
-        end,
-        width = "half",	
-        },
-        { --Delete Rule
-        type = "button",
-        name = WG.Lang.GUILD_STEPS_DELETE,
-        func = function()
-          table.remove(WG.SV.Guild4, GuildS4C)
-        end,
-        width = "half",	
-        },
-      },
-    },
-    { --Guild Rule 5
-    type = "submenu",
-		name = function() return GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 5 > "..GetGuildName(WG.SV.Guild[5] or 0) end,
-    disabled = function() if WG.SV.Guild[5] then return false else return true end end,
-		controls = {
-        
-        { --Item Scroll
-        type = "dropdown",
-        name = WG.Lang.GUILD_ITEM_SCROLL, 
-        choices = ItemList(),
-        scrollable = true,
-        getFunc = function() if GuildD5A then return GuildD5A else return "/" end end,
-        setFunc = function(var) 
-          if var ~= "/" then 
-            GuildD5A = var
-          else 
-            GuildD5A = nil
-          end
-        end,
-        reference = "WG_Guild_5_Item",
-        width = "full",
-        },
-        { --Fuzzy
-        type = "checkbox",
-        name = WG.Lang.GUILD_FUZZY,
-        tooltip = WG.Lang.GUILD_FUZZY_TOOLTIP,
-        getFunc = function() return GuildFuzzy5 end,
-        setFunc = function(var) GuildFuzzy5 = var end,
-        width = "half",
-        },
-        { --UpdateList
-        type = "button",
-        name = WG.Lang.GUILD_UPDATE_ITEM_LIST,
-        func = function()
-          GuildD5A = nil
-          WG_Guild_5_Item.data.choices = ItemList()
-          WG_Guild_5_Item:UpdateChoices()
-        end,
-        width = "half",	
-        },
-        KnowledgeDepositButton(5),
-        { --Withdraw all
-        type = "button",
-        name = WG.Lang.GUILD_TAKE_ALL,
-        func = function()
-          if not GuildD5A then return end
-          if GuildFuzzy5 then
-            table.insert(WG.SV.Guild5, {["GuildId"] = WG.SV.Guild[5], ["Type"] = WAREGUILD_TAKE_ALL, ["ItemId"] = GetItemLinkItemId(GuildD5A)})
-          else
-            table.insert(WG.SV.Guild5, {["GuildId"] = WG.SV.Guild[5], ["Type"] = WAREGUILD_TAKE_ALL, ["ItemLink"] = GuildD5A})
-          end
-        end,
-        width = "half",	
-        },
-        { --Store All
-        type = "button",
-        name = WG.Lang.GUILD_STORE_ALL,
-        func = function()
-          if not GuildD5A then return end
-          if GuildFuzzy5 then
-            table.insert(WG.SV.Guild5, {["GuildId"] = WG.SV.Guild[5], ["Type"] = WAREGUILD_STORE_ALL, ["ItemId"] = GetItemLinkItemId(GuildD5A)})
-          else
-            table.insert(WG.SV.Guild5, {["GuildId"] = WG.SV.Guild[5], ["Type"] = WAREGUILD_STORE_ALL, ["ItemLink"] = GuildD5A})
-          end
-        end,
-        width = "half",	
-        },
-        { --TakeTo
-        type = "slider",
-        name = WG.Lang.GUILD_TAKE_TO_SLIDER,
-        getFunc = function() return 0 end,
-        setFunc = function(var) GuildS5A = var end,
-        min = 0,
-        max = 10000,
-        step = 1,
-        width = "half",
-        },
-        { 
-        type = "button",
-        name = WG.Lang.GUILD_TAKE_TO,
-        func = function()
-          if not GuildD5A then return end
-          if GuildFuzzy5 then
-            table.insert(WG.SV.Guild5, {["GuildId"] = WG.SV.Guild[5], ["Type"] = WAREGUILD_TAKE_TO, ["Count"] = GuildS5A, ["ItemId"] = GetItemLinkItemId(GuildD5A)})
-          else
-            table.insert(WG.SV.Guild5, {["GuildId"] = WG.SV.Guild[5], ["Type"] = WAREGUILD_TAKE_TO, ["Count"] = GuildS5A, ["ItemLink"] = GuildD5A})
-          end
-        end,
-        width = "half",	
-        },
-        { --StoreTo
-        type = "slider",
-        name = WG.Lang.GUILD_STORE_TO_SLIDER,
-        getFunc = function() return 0 end,
-        setFunc = function(var) GuildS5B = var end,
-        min = 0,
-        max = 10000,
-        step = 1,
-        width = "half",
-        },
-        { 
-        type = "button",
-        name = WG.Lang.GUILD_STORE_TO,
-        func = function()
-          if not GuildD5A then return end
-          if GuildFuzzy5 then
-            table.insert(WG.SV.Guild5, {["GuildId"] = WG.SV.Guild[5], ["Type"] = WAREGUILD_STORE_TO, ["Count"] = GuildS5B, ["ItemId"] = GetItemLinkItemId(GuildD5A)})
-          else
-            table.insert(WG.SV.Guild5, {["GuildId"] = WG.SV.Guild[5], ["Type"] = WAREGUILD_STORE_TO, ["Count"] = GuildS5B, ["ItemLink"] = GuildD5A})
-          end
-        end,
-        width = "half",	
-        },
-        {
-        type = "header",
-        name = GetString(SI_FURNITURETHEMETYPE1),
-        },
-        { --Store Craft Materials
-        type = "dropdown",
-        name = WG.Lang.GUILD_STORE_ALL_TYPE_DROP, 
-        choices = MaterialChoices,
-        choicesValues = MaterialChoicesValue,
-        scrollable = true,
-        getFunc = function() return "/" end,
-        setFunc = function(var) 
-          if var ~= "/" then
-            GuildD5B = var
-          else
-            GuildD5B = nil
-          end
-        end,
-        width = "full",
-        },
-        { --Withdraw for Daily Writs
-        type = "button",
-        name = WG.Lang.GUILD_TAKE_WRITS,
-        tooltip = WG.Lang.GUILD_TAKE_WRITS_TOOLTIP,
-        func = function()
-          table.insert(WG.SV.Guild5, {["GuildId"] = WG.SV.Guild[5], ["Type"] = WAREGUILD_DAILY})
-        end,
-        width = "half",	
-        },
-        { 
-        type = "button",
-        name = WG.Lang.GUILD_STORE_ALL_TYPE,
-        func = function()
-          if not GuildD5B then return end
-          table.insert(WG.SV.Guild5, {["GuildId"] = WG.SV.Guild[5], ["Type"] = GuildD5B})
-        end,
-        width = "half",	
-        },
-        {
-        type = "header",
-        name = WG.Lang.GUILD_HEADER_STEPS,
-        },
-        { --Rules Display
-        type = "description",
-        title = GetString(SI_GAMEPAD_GUILD_BANK_CATEGORY_HEADER).." 5 > ",
-        text = function() return Desc(WG.SV.Guild5) end,
-        width = "full",
-        enableLinks = true,
-        },
-        { --Which Line
-        type = "slider",
-        name = WG.Lang.GUILD_STEPS_SLIDER,
-        getFunc = function() return 1 end,
-        setFunc = function(var) GuildS5C = var end,
-        min = 1,
-        max = 1000,
-        step = 1,
-        width = "full",
-        },
-        { --Empty Rule
-        type = "button",
-        name = WG.Lang.GUILD_STEPS_EMPTY,
-        func = function()
-          WG.SV.Guild5 = {}
-        end,
-        width = "half",	
-        },
-        { --Delete Rule
-        type = "button",
-        name = WG.Lang.GUILD_STEPS_DELETE,
-        func = function()
-          table.remove(WG.SV.Guild5, GuildS5C)
-        end,
-        width = "half",	
-        },
-      },
-    },
+    GuildSelector(1),
+    GuildSelector(2),
+    GuildSelector(3),
+    GuildSelector(4),
+    GuildSelector(5),
+    GuildRules(1),
+    GuildRules(2),
+    GuildRules(3),
+    GuildRules(4),
+    GuildRules(5),
     { --Clipboard
     type = "submenu",
 		name = WG.Lang.CLIP,
@@ -1309,11 +520,7 @@ function WG.BuildMenu()
         name = GetString(SI_UI_ERROR_COPY),
         func = function()
           if not ClipGuild then return end
-          if ClipGuild == 1 then ClipSteps = WG.SV.Guild1 end
-          if ClipGuild == 2 then ClipSteps = WG.SV.Guild2 end
-          if ClipGuild == 3 then ClipSteps = WG.SV.Guild3 end
-          if ClipGuild == 4 then ClipSteps = WG.SV.Guild4 end
-          if ClipGuild == 5 then ClipSteps = WG.SV.Guild5 end
+          ClipSteps = WG.SV["Guild" .. ClipGuild]
         end,
         width = "half",	
         },
@@ -1322,11 +529,7 @@ function WG.BuildMenu()
         name = WG.Lang.CLIP_PASTE,
         func = function()
           if not ClipGuild then return end
-          if ClipGuild == 1 then WG.SV.Guild1 = CopySteps(WG.SV.Guild[1], ClipSteps) end
-          if ClipGuild == 2 then WG.SV.Guild2 = CopySteps(WG.SV.Guild[2], ClipSteps) end
-          if ClipGuild == 3 then WG.SV.Guild3 = CopySteps(WG.SV.Guild[3], ClipSteps) end
-          if ClipGuild == 4 then WG.SV.Guild4 = CopySteps(WG.SV.Guild[4], ClipSteps) end
-          if ClipGuild == 5 then WG.SV.Guild5 = CopySteps(WG.SV.Guild[5], ClipSteps) end
+          WG.SV["Guild" .. ClipGuild] = CopySteps(WG.SV.Guild[ClipGuild], ClipSteps)
         end,
         width = "half",	
         },

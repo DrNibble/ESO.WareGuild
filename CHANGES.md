@@ -1,5 +1,35 @@
 # CHANGES
 
+## 2026-11-14 - v0.39.1 (refactor : construction du menu de banque de guilde)
+
+**Objectif** : les cinq sections guilde de Menu.lua (sélecteur de guilde +
+sous-menu de règles) étaient des copies quasi identiques où seul le numéro de
+guilde (1 à 5) changeait, avec une trentaine de variables locales
+(GuildD1A..GuildS5C) et des chaînes de cinq « if ClipGuild == n » dans le
+presse-papiers.
+
+**Changements** :
+- Les 30 variables locales deviennent une table d'état par guilde,
+  `GuildState[1..5]` (Item, Material, Fuzzy, TakeTo, StoreTo, Line).
+- Deux fonctions constructrices, `GuildSelector(GuildIndex)` (dropdown
+  d'affectation de guilde) et `GuildRules(GuildIndex)` (sous-menu complet :
+  sélection d'objet, fuzzy, retraits/dépôts, matériaux d'artisanat, ordres
+  quotidiens, éditeur de règles), appellées pour 1 à 5 ; les boutons partagent
+  les aides `InsertStep` (ajout d'une règle) et `ItemStep` (règle d'objet,
+  fuzzy ou lien complet, avec compte optionnel).
+- Le presse-papiers copie/colle via `WG.SV["Guild" .. ClipGuild]` au lieu
+  des cinq « if » successifs.
+- Le contrôle LAM de la liste d'objets est retrouvé par
+  `_G["WG_Guild_" .. GuildIndex .. "_Item"]` (référence inchangée).
+
+**Limites** : aucun changement de comportement voulu ; les mêmes boutons,
+libellés, langues et structures de règles qu'avant. Menu.lua passe de 1346 à
+554 lignes.
+
+**Tests** : test_GuildBankDeposit.lua 307/307 (dont construction réelle du
+menu LAM, boutons et dropdowns des cinq guildes) et test_WareGuild.lua 98/98
+sous Lua 5.1 ; compilation luac -p OK. Non testé dans ESO.
+
 ## 2026-11-13 - v0.39 (runes : liens de banque dégradés au-delà du niveau 0/1)
 
 **Problème** : en v0.38, le regroupement des piles existantes était limité aux
