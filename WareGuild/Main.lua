@@ -2,7 +2,7 @@ local WG = SDC_WareGuild
 
 WG.name = "WareGuild"
 WG.title = "WareGuild"
-WG.author = "@MelanAster"
+WG.author = "@Altorus13"
 WG.version = "0.37"
 
 --Default Setting
@@ -352,7 +352,7 @@ function WG.FindUnknownCharacterItems()
   for SlotId = 0, GetBagSize(1) - 1 do
     if KnowledgeSlotAllowed(1, SlotId) then
       local Link = GetItemLink(1, SlotId)
-      if Cache[Link] == nil then Cache[Link] = WG.IsUnknownToOtherCharacters(Link) end
+      if Cache[Link] == nil then Cache[Link] = WG.IsUnknownToOtherCharacters(Link) and not WG.IsUnknownToCurrentCharacter(Link) end
       if Cache[Link] then table.insert(Slots, {BagId = 1, SlotId = SlotId}) end
     end
   end
