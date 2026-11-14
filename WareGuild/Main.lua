@@ -289,10 +289,10 @@ function WG.FindItem(BagId, ItemId, ItemLink, ItemFilter)
       local Link = GetItemLink(3, i)
       if DoesItemMatch(Link, ItemId, ItemLink) then
         -- Inventory Totals Also Serve Deposit Rules: Count Stock Even Without Take Permission.
-        -- local Reason = WG.WithdrawalBlockReason(i, true)
-        -- if not Reason and IsWritFilter then
-          -- Reason = WG.WritItemBlockReason(Link, ItemFilter.CraftLevel, ItemFilter.CraftChampionPoints, ItemFilter, 3, i)
-        -- end
+         local Reason = WG.WithdrawalBlockReason(i, true)
+         if not Reason and IsWritFilter then
+           Reason = WG.WritItemBlockReason(Link, ItemFilter.CraftLevel, ItemFilter.CraftChampionPoints, ItemFilter, 3, i)
+         end
         -- if Reason then
           -- WG.ReportWithdrawalBlocked(Link, Reason)
         -- else
@@ -808,8 +808,8 @@ local function TakeGuildBankItem(Target)
   if not MatchesWithdrawalItem(Link, Target.ItemLink)
      or select(2, GetItemInfo(3, Target.SlotId)) ~= Target.Count then
      Reason = WG.Lang.CHAT_WITHDRAW_CHANGED
-  -- else
-    -- Reason = WG.WithdrawalBlockReason(Target.SlotId)
+   else
+    Reason = WG.WithdrawalBlockReason(Target.SlotId)
   end
    if Reason then
     -- WG.ReportWithdrawalBlocked(Target.ItemLink, Reason)
@@ -838,7 +838,7 @@ local function TakeGuildBankItem(Target)
       if Error ~= nil then
         Failure = zo_strformat(WG.Lang.CHAT_WITHDRAW_ERROR, tostring(Error), GetString("SI_GUILDBANKRESULT", Error))
       elseif Context == "guild-changed" then Failure = WG.Lang.CHAT_WITHDRAW_GUILD_CHANGED end
-      WG.ReportWithdrawalBlocked(Target.ItemLink, Failure, Target.GuildId)
+      --WG.ReportWithdrawalBlocked(Target.ItemLink, Failure, Target.GuildId)
     end)
 end
 
