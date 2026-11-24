@@ -148,6 +148,7 @@ GetJournalQuestInfo = function(idx)
   return "Writ", nil, nil, nil, nil, nil, nil, nil, nil, q.type
 end
 GetQuestConditionMasterWritInfo = function() return nil end
+GetJournalQuestNumConditions = function(idx) return #Journal[idx].conditions end
 GetQuestConditionItemInfo = function(idx, step, cond)
   local q = Journal[idx]
   if not q or not q.conditions[cond] then return 0, 0, 0, 0 end
@@ -363,7 +364,7 @@ Journal[1] = nil
 local P, PR
 M, P, PR = WG.FindLazyCraftingItem()
 check("product in bank: no materials", next(M) == nil)
-check("product in bank: products entry", P[45057] and P[45057]["Count"] == 2)
+check("product in bank: products entry", P["45057:1:0"] and P["45057:1:0"].Count == 2)
 check("product in bank: replaced 10", PR[5413] == 10)
 local D = WG.FindDailyItem()
 local foundMat, foundProd
@@ -380,7 +381,7 @@ GuildBank = {[4] = 45057}
 Stacks[45057] = {0, 0, 0}
 M, P, PR = WG.FindLazyCraftingItem()
 check("partial: materials reduced to 1 item", M[5413] == 5)
-check("partial: product 1", P[45057]["Count"] == 1)
+check("partial: product 1", P["45057:1:0"].Count == 1)
 check("partial: replaced 5", PR[5413] == 5)
 D = WG.FindDailyItem()
 foundMat, foundProd = nil, nil
@@ -403,7 +404,7 @@ setLLC({["A"] = {[1] = {LLCRequest(1, 7, 1, 5, 2, nil, "free style choice")}}})
 GuildBank = {[4] = 45057, [5] = 45057}
 Stacks[45057] = {0, 0, 0}
 M, P, PR = WG.FindLazyCraftingItem()
-check("free style: product taken", P[45057] and P[45057]["Count"] == 2)
+check("free style: product taken", P["45057:1:0"] and P["45057:1:0"].Count == 2)
 check("free style: no materials", M[5413] == nil)
 
 -- 16b. request with a trait -> materials only
@@ -448,9 +449,9 @@ check("product setting off: materials full", M[5413] == 10)
 check("product setting off: no products", next(P) == nil)
 WG.SV.LazyCraftingProduct = true
 
--- 18. Product covers the writ need: writ materials reduced
+-- 18. A different item sharing the same material does not cover the writ.
 -- blacksmith writ: 2 items of pattern 43529, mat 146 (excel: 5413 x 3) => 6
--- LLC queue: same 2 items, product available in guild bank
+-- LLC queue: 2 pieces with a different item ID, available in the guild bank.
 setLLC({["A"] = {[1] = {LLCRequest(1, 7, 1, 5, 2)}}})
 GuildBank = {[4] = 45057, [5] = 45057}
 Stacks[5413] = {0, 0, 0}
@@ -461,8 +462,8 @@ for _, e in ipairs(D) do
   if e.ItemId == 5413 then foundMat = e.Count end
   if e.ItemId == 45057 then foundProd = e.Count end
 end
-check("writ covered by product: no materials", foundMat == nil)
-check("writ covered by product: 2 products", foundProd == 2)
+check("unrelated smithing products do not reduce writ materials", foundMat == 6)
+check("unrelated LLC request still takes its own finished products", foundProd == 2)
 Journal[1] = nil
 
 
@@ -634,6 +635,14 @@ local selected = WG.FindItem(3, foundProd.ItemId, foundProd.ItemLink, foundProd)
 check("withdrawal ignores same itemId at wrong level", #selected == 1 and selected[1].SlotId == 5)
 check("ordinary itemId lookup remains unchanged", WG.FindItem(3, 43556)["Total"] == 2)
 
+PatternMat[99] = 803
+setLLC({["A"] = {[6] = {LLCRequest(6, 99, 2, 6, 2)}}})
+foundMat, foundProd = DailyProduct()
+check("same level and item in LLC and journal do not claim the bank slot twice",
+  foundMat == 6 and foundProd and foundProd.Count == 1)
+setLLC(nil)
+PatternMat[99] = nil
+
 Bag = {[0] = 43556}
 SlotLinks[1][0] = GearLink("bag-wrong-level", 4, 0)
 foundMat, foundProd = DailyProduct()
@@ -645,10 +654,11 @@ Bag = {}
 SlotLinks[1] = {}
 
 ReferenceLevel, ReferenceCP = 50, 150
+Journal[1].conditions[1][2] = 192
 SlotLinks[3][4] = GearLink("cp160", 50, 160)
 SlotLinks[3][5] = GearLink("cp150", 50, 150)
 foundMat, foundProd = DailyProduct()
-check("CP150 writ rejects CP160 at same level", foundMat == 6 and foundProd.Count == 1)
+check("CP150 writ rejects CP160 at same level", foundMat == nil and foundProd.Count == 1)
 selected = WG.FindItem(3, foundProd.ItemId, foundProd.ItemLink, foundProd)
 check("CP filter reaches slot lookup", #selected == 1 and selected[1].SlotId == 5)
 SlotLinks[3][5] = GearLink("cp150-green", 50, 150, 2, 0)
@@ -656,18 +666,21 @@ check("slot lookup keeps white filter", WG.FindItem(3, foundProd.ItemId, foundPr
 SlotLinks[3][5] = GearLink("cp150-trait", 50, 150, 1, 1)
 check("slot lookup keeps no-trait filter", WG.FindItem(3, foundProd.ItemId, foundProd.ItemLink, foundProd).Total == 0)
 
--- Away from a crafting station there is no reference link: the exact level is not
--- compared and the journal condition, quality and trait decide.
+-- Away from a crafting station, the recipe material supplies the exact level.
+Journal[1].conditions[1][2] = 147
 local function NoReferenceChecks(Name)
   GuildBank = {[4] = 43556, [5] = 43556}
-  SlotLinks[3] = {[4] = GearLink("any-level", 50, 160), [5] = GearLink("green", 50, 160, 2, 0)}
+  SlotLinks[3] = {[4] = GearLink("maple-level", 1, 0), [5] = GearLink("green", 1, 0, 2, 0),
+    [6] = GearLink("ruby-ash", 50, 150)}
+  GuildBank[6] = 43556
   foundMat, foundProd = DailyProduct()
-  check(Name .. ": white untraited bank item covers the writ without level",
+  check(Name .. ": white untraited maple covers the writ without reference",
     foundProd ~= nil and foundProd.Count == 1 and foundMat == 6
-    and foundProd.CraftLevel == nil and foundProd.WritProduct == true)
+    and foundProd.CraftLevel == 1 and foundProd.CraftChampionPoints == 0 and foundProd.WritProduct == true)
   local selected = WG.FindItem(3, foundProd.ItemId, foundProd.ItemLink, foundProd)
   check(Name .. ": slot lookup selects the white item only", #selected == 1 and selected[1].SlotId == 4)
-  SlotLinks[3] = {[4] = GearLink("green-only", 50, 160, 2, 0), [5] = GearLink("trait-only", 50, 160, 1, 1)}
+  GuildBank[6] = nil
+  SlotLinks[3] = {[4] = GearLink("green-only", 1, 0, 2, 0), [5] = GearLink("trait-only", 1, 0, 1, 1)}
   foundMat, foundProd = DailyProduct()
   check(Name .. ": quality and trait still enforced", foundMat == 12 and foundProd == nil)
   Bag = {[0] = 43556}
@@ -683,6 +696,20 @@ PatternUnavailable = false
 ReferenceUnavailable = true
 NoReferenceChecks("empty reference")
 ReferenceUnavailable = false
+NoReferenceChecks("reference of another material tier")
+PatternUnavailable = true
+local OldRecipe = WG.MaterialExcel[6][43556][147]
+WG.MaterialExcel[6][43556][147] = {98765, 6}
+GuildBank, SlotLinks[3] = {[4] = 43556}, {[4] = GearLink("unverified-tier", 1, 0)}
+local UnknownTierRaw, UnknownTierProduct
+for _, Entry in ipairs(WG.FindDailyItem()) do
+  if Entry.ItemId == 98765 then UnknownTierRaw = Entry.Count end
+  if Entry.ItemId == 43556 then UnknownTierProduct = Entry end
+end
+check("unverified tier falls back to materials instead of taking gear",
+  UnknownTierRaw == 12 and not UnknownTierProduct)
+WG.MaterialExcel[6][43556][147] = OldRecipe
+PatternUnavailable = false
 SlotLinks[3] = {[4] = GearLink("cp160", 50, 160), [5] = GearLink("cp150-trait", 50, 150, 1, 1)}
 GuildBank = {[4] = 43556, [5] = 43556}
 GuildBank = nil

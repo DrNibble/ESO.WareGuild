@@ -144,6 +144,135 @@ local function ItemStep(GuildIndex, State, RuleType, Count)
   return InsertStep(GuildIndex, Step)
 end
 
+--LibCustomMenu supplies the two actions; the native dialog supplies the editor.
+local ContextDialog = "WAREGUILD_ITEM_RULE"
+local ContextRegistered = false
+
+local function CurrentGuildId(Index)
+  local Id = WG.SV.Guild[Index]
+  if not Id or Id == 0 then return end
+  for MemberIndex = 1, 5 do
+    if GetGuildId(MemberIndex) == Id then return Id end
+  end
+end
+
+local function RuleQuantity(Edit)
+  return math.max(1, math.min(200, math.floor(tonumber(Edit:GetText()) or 1)))
+end
+
+local function CanSaveContextRule(Dialog)
+  if not Dialog.data or Dialog.data.Settings ~= WG.SV then return false end
+  for Index, Check in ipairs(Dialog.GuildChecks) do
+    if ZO_CheckButton_IsChecked(Check) and Check.GuildId and Check.GuildId == CurrentGuildId(Index) then
+      return true
+    end
+  end
+  return false
+end
+
+local function SaveContextRule(Dialog)
+  if not CanSaveContextRule(Dialog) then return end
+  local Data = Dialog.data
+  local All = Data.Stackable and ZO_CheckButton_IsChecked(Dialog.AllCheck)
+  local RuleType
+  if Data.Take then RuleType = All and WAREGUILD_TAKE_ALL or WAREGUILD_TAKE_TO
+  else RuleType = All and WAREGUILD_STORE_ALL or WAREGUILD_STORE_TO end
+  local Count
+  if not All then Count = Data.Stackable and RuleQuantity(Dialog.Quantity) or 1 end
+  for Index, Check in ipairs(Dialog.GuildChecks) do
+    if ZO_CheckButton_IsChecked(Check) and Check.GuildId and Check.GuildId == CurrentGuildId(Index) then
+      ItemStep(Index, {Item = Data.Link, Fuzzy = Data.Stackable}, RuleType, Count)
+    end
+  end
+end
+
+local function RegisterContextDialog(Dialog)
+  local Decrease, Increase = Dialog:GetNamedChild("Decrease"), Dialog:GetNamedChild("Increase")
+  Dialog.Quantity = Dialog:GetNamedChild("QuantityBox"):GetNamedChild("Edit")
+  Dialog.Quantity:SetTextType(TEXT_TYPE_NUMERIC_UNSIGNED_INT)
+  Dialog.Quantity:SetMaxInputChars(3)
+  Dialog.Quantity:SetHandler("OnFocusLost", function(Edit) Edit:SetText(tostring(RuleQuantity(Edit))) end)
+  Dialog.Quantity:SetHandler("OnEnter", function(Edit) Edit:LoseFocus() end)
+  local function Adjust(Delta)
+    Dialog.Quantity:SetText(tostring(math.max(1, math.min(200, RuleQuantity(Dialog.Quantity) + Delta))))
+  end
+  Decrease:SetHandler("OnClicked", function() Adjust(-1) end)
+  Increase:SetHandler("OnClicked", function() Adjust(1) end)
+  Dialog.AllCheck = Dialog:GetNamedChild("All")
+  local function UpdateQuantity()
+    local Enabled = Dialog.data.Stackable and not ZO_CheckButton_IsChecked(Dialog.AllCheck)
+    if not Enabled then Dialog.Quantity:LoseFocus() end
+    Dialog.Quantity:SetEditEnabled(Enabled)
+    Decrease:SetEnabled(Enabled)
+    Increase:SetEnabled(Enabled)
+  end
+  ZO_CheckButton_SetLabelText(Dialog.AllCheck, WG.Lang.CONTEXT_ALL)
+  ZO_CheckButton_SetToggleFunction(Dialog.AllCheck, UpdateQuantity)
+  Dialog.GuildChecks = {}
+  for Index = 1, 5 do
+    local Check = Dialog:GetNamedChild("Guild" .. Index)
+    Dialog.GuildChecks[Index] = Check
+    ZO_CheckButton_SetToggleFunction(Check, function()
+      ZO_Dialogs_UpdateButtonVisibilityAndEnabledState(Dialog)
+    end)
+  end
+  Dialog:GetNamedChild("Guilds"):SetText(WG.Lang.CONTEXT_GUILDS)
+
+  ZO_Dialogs_RegisterCustomDialog(ContextDialog, {
+    customControl = Dialog,
+    title = {text = WG.title},
+    mainText = {text = "<<1>>"},
+    setup = function(Control, Data)
+      Control:GetNamedChild("QuantityLabel"):SetText(Data.Take and WG.Lang.CONTEXT_TAKE_COUNT
+        or WG.Lang.CONTEXT_STORE_COUNT)
+      Control.Quantity:SetText("1")
+      ZO_CheckButton_SetCheckState(Control.AllCheck, false)
+      Control.AllCheck:SetHidden(not Data.Stackable)
+      UpdateQuantity()
+      for Index, Check in ipairs(Control.GuildChecks) do
+        local Id = CurrentGuildId(Index)
+        Check.GuildId = Id
+        ZO_CheckButton_SetCheckState(Check, false)
+        ZO_CheckButton_SetLabelText(Check, Index .. ". " .. (Id and GetGuildName(Id) or WG.Lang.CONTEXT_NO_GUILD))
+        ZO_CheckButton_SetEnableState(Check, Id ~= nil)
+      end
+      ZO_Dialogs_UpdateButtonVisibilityAndEnabledState(Control)
+    end,
+    buttons = {
+      {control = Dialog:GetNamedChild("Confirm"), text = WG.Lang.CONTEXT_SAVE,
+        enabled = CanSaveContextRule, callback = SaveContextRule},
+      {control = Dialog:GetNamedChild("Cancel"), text = SI_DIALOG_CANCEL},
+    },
+  })
+end
+
+function WG.RegisterItemContextMenu()
+  local LCM = LibCustomMenu
+  if ContextRegistered or not LCM or not LCM.RegisterContextMenu
+    or not AddCustomSubMenuItem or not WareGuildItemRuleDialog then return end
+  RegisterContextDialog(WareGuildItemRuleDialog)
+  LCM:RegisterContextMenu(function(Row)
+    local BagId, SlotId = ZO_Inventory_GetBagAndIndex(Row)
+    if not BagId or SlotId == nil then return end
+    local Link = GetItemLink(BagId, SlotId)
+    if not Link or Link == "" or GetItemLinkItemId(Link) == 0 then return end
+    local _, MaxStack = GetSlotStackSize(BagId, SlotId)
+    if not MaxStack or MaxStack < 1 then return end
+    local Name = zo_strformat(SI_TOOLTIP_ITEM_NAME, GetItemLinkName(Link))
+    local Quality = GetItemLinkDisplayQuality(Link)
+    if Quality then Name = GetItemQualityColor(Quality):Colorize(Name) end
+    local function Entry(Take, Text)
+      local Label = zo_strformat(Text, Name)
+      return {label = Label, callback = function()
+        ZO_Dialogs_ShowDialog(ContextDialog, {Link = Link, Stackable = MaxStack > 1,
+          Take = Take, Settings = WG.SV}, {mainTextParams = {Label}})
+      end}
+    end
+    AddCustomSubMenuItem(WG.title, {Entry(true, WG.Lang.CONTEXT_TAKE), Entry(false, WG.Lang.CONTEXT_STORE)})
+  end, LCM.CATEGORY_LATE)
+  ContextRegistered = true
+end
+
 --Dropdown assigning a guild to guild bank slot GuildIndex. Changing the
 --guild empties the rule list, as before.
 local function GuildSelector(GuildIndex)

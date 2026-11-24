@@ -3,7 +3,7 @@ local WG = SDC_WareGuild
 WG.name = "WareGuild"
 WG.title = "WareGuild"
 WG.author = "@Altorus13"
-WG.version = "0.37"
+WG.version = "0.41"
 
 --Default Setting
 WG.Default = {
@@ -62,6 +62,7 @@ local function OnAddOnLoaded(eventCode, addonName)
   
   --LAM
   WG.BuildMenu()
+  WG.RegisterItemContextMenu()
 end
 
 --Character Setting?
@@ -207,8 +208,6 @@ function WG.WithdrawalBlockReason(SlotId, IgnorePermission)
   end
 end
 
---The Journal Condition Is the Only Check of the Material Tier Available Outside a Crafting
---Station: Same-ItemId Items of Another Tier (Maple Shield vs Ruby Ash Shield) Must Not Pass
 function WG.FulfillsWritConditions(Filter, Link, BagId, SlotId)
   if not Filter or not Filter.Conditions then return true end
   local Own = GetItemCreatorName(BagId, SlotId) == GetUnitName("player")
@@ -219,13 +218,18 @@ function WG.FulfillsWritConditions(Filter, Link, BagId, SlotId)
 end
 
 function WG.WritItemBlockReason(Link, Level, CP, Filter, BagId, SlotId)
-  if GetItemLinkQuality(Link) ~= ITEM_QUALITY_NORMAL then return WG.Lang.CHAT_WITHDRAW_QUALITY end
-  if GetItemLinkTraitInfo(Link) ~= ITEM_TRAIT_TYPE_NONE then return WG.Lang.CHAT_WITHDRAW_TRAIT end
-  --Level Unknown (No Reference Link Outside a Crafting Station): the Journal Condition Checks the Tier
-  if Level ~= nil and CP ~= nil
-    and (GetItemLinkRequiredLevel(Link) ~= Level or GetItemLinkRequiredChampionPoints(Link) ~= CP) then
-    return zo_strformat(WG.Lang.CHAT_WITHDRAW_LEVEL, Level, CP,
-      GetItemLinkRequiredLevel(Link), GetItemLinkRequiredChampionPoints(Link))
+  --Prefer slot metadata: the guild-bank link may contain a degraded level.
+  local Quality = GetItemFunctionalQuality and GetItemFunctionalQuality(BagId, SlotId) or GetItemLinkQuality(Link)
+  local Trait = GetItemTrait and GetItemTrait(BagId, SlotId) or GetItemLinkTraitInfo(Link)
+  if Quality ~= ITEM_QUALITY_NORMAL then return WG.Lang.CHAT_WITHDRAW_QUALITY end
+  if Trait ~= ITEM_TRAIT_TYPE_NONE then return WG.Lang.CHAT_WITHDRAW_TRAIT end
+  if Level ~= nil then
+    local ActualLevel = GetItemRequiredLevel and GetItemRequiredLevel(BagId, SlotId) or GetItemLinkRequiredLevel(Link)
+    local ActualCP = GetItemRequiredChampionPoints and GetItemRequiredChampionPoints(BagId, SlotId)
+      or GetItemLinkRequiredChampionPoints(Link)
+    if ActualLevel ~= Level or ActualCP ~= CP then
+      return zo_strformat(WG.Lang.CHAT_WITHDRAW_LEVEL, Level, CP, tostring(ActualLevel), tostring(ActualCP))
+    end
   end
   if not WG.FulfillsWritConditions(Filter, Link, BagId, SlotId) then return WG.Lang.CHAT_WITHDRAW_CONDITION end
 end
@@ -257,26 +261,26 @@ local function DoesItemMatch(Link, ItemId, ItemLink)
 end
 
 --CORE: Find Item Slot
-function WG.FindItem(BagId, ItemId, ItemLink, ItemFilter)
+function WG.FindItem(BagId, ItemId, ItemLink, ItemFilter, ForWithdrawal)
   local Slot = {}
   local Total = 0
-  --Only Writ Equipment Carries This Filter; Ordinary Item Rules Stay Unchanged
-  local IsWritFilter = ItemFilter and (ItemFilter.WritProduct or ItemFilter.CraftLevel ~= nil)
-  local function MatchesCraftLevel(Link, SlotBag, SlotId)
-    if not IsWritFilter then return true end
-    if not WG.FulfillsWritConditions(ItemFilter, Link, SlotBag, SlotId) then return false end
-    return GetItemLinkQuality(Link) == ITEM_QUALITY_NORMAL
-      and GetItemLinkTraitInfo(Link) == ITEM_TRAIT_TYPE_NONE
-      and (ItemFilter.CraftLevel == nil or (
-        GetItemLinkRequiredLevel(Link) == ItemFilter.CraftLevel
-        and GetItemLinkRequiredChampionPoints(Link) == ItemFilter.CraftChampionPoints))
+  local IsWritGear = ItemFilter and (ItemFilter.WritProduct or ItemFilter.CraftLevel ~= nil)
+  local function FilterReason(Link, SlotId)
+    if IsWritGear then
+      return WG.WritItemBlockReason(Link, ItemFilter.CraftLevel, ItemFilter.CraftChampionPoints,
+        ItemFilter, BagId, SlotId)
+    end
+    if not WG.FulfillsWritConditions(ItemFilter, Link, BagId, SlotId) then
+      return WG.Lang.CHAT_WITHDRAW_CONDITION
+    end
   end
   
   --BackBag
   if BagId == 1 then
     for i = 0, GetBagSize(1) - 1 do
       local Link = GetItemLink(1, i)
-      if not IsItemLinkStolen(Link) and FCOISAllow(1, i) and DoesItemMatch(Link, ItemId, ItemLink) and MatchesCraftLevel(Link, 1, i) then
+      if not IsItemLinkStolen(Link) and FCOISAllow(1, i) and not IsItemPlayerLocked(1, i)
+        and DoesItemMatch(Link, ItemId, ItemLink) and not FilterReason(Link, i) then
         local count = select(2, GetItemInfo(1, i))
         Total = Total + count
         table.insert(Slot, {["BagId"] = 1, ["SlotId"] = i, ["Count"] = count})
@@ -288,18 +292,14 @@ function WG.FindItem(BagId, ItemId, ItemLink, ItemFilter)
     for i in WG.GuildBankSlots do
       local Link = GetItemLink(3, i)
       if DoesItemMatch(Link, ItemId, ItemLink) then
-        -- Inventory Totals Also Serve Deposit Rules: Count Stock Even Without Take Permission.
-         local Reason = WG.WithdrawalBlockReason(i, true)
-         if not Reason and IsWritFilter then
-           Reason = WG.WritItemBlockReason(Link, ItemFilter.CraftLevel, ItemFilter.CraftChampionPoints, ItemFilter, 3, i)
-         end
-        -- if Reason then
-          -- WG.ReportWithdrawalBlocked(Link, Reason)
-        -- else
+        local Reason = (ForWithdrawal and WG.WithdrawalBlockReason(i)) or FilterReason(Link, i)
+        if not Reason then
           local count = select(2, GetItemInfo(3, i))
           Total = Total + count
           table.insert(Slot, {["BagId"] = 3, ["SlotId"] = i, ["Count"] = count})
-        -- end
+        elseif ForWithdrawal and (IsWritGear or (ItemFilter and ItemFilter.Conditions)) then
+          WG.ReportWithdrawalBlocked(Link, Reason)
+        end
       end
     end
   end
@@ -617,7 +617,8 @@ local function DepositSlots(Target, BagId)
   for _, Slot in ipairs(Candidates) do
     local Link = GetItemLink(BagId, Slot.SlotId)
     local _, Max = GetSlotStackSize(BagId, Slot.SlotId)
-    local Allowed = not Target.KnowledgeRule or KnowledgeSlotAllowed(BagId, Slot.SlotId)
+    local Allowed = (BagId ~= 3 or not WG.WithdrawalBlockReason(Slot.SlotId, true))
+      and (not Target.KnowledgeRule or KnowledgeSlotAllowed(BagId, Slot.SlotId))
     if Max > 1 then
       --Stackable: same ItemId is the same item whatever the link variant.
       Allowed = Allowed and GetItemLinkItemId(Link) == Id
@@ -804,22 +805,42 @@ end
 
 local function TakeGuildBankItem(Target)
   local Link = GetItemLink(3, Target.SlotId)
+  local _, MaxStack = GetSlotStackSize(3, Target.SlotId)
   local Reason
   if not MatchesWithdrawalItem(Link, Target.ItemLink)
      or select(2, GetItemInfo(3, Target.SlotId)) ~= Target.Count then
-     Reason = WG.Lang.CHAT_WITHDRAW_CHANGED
-   else
+    Reason = WG.Lang.CHAT_WITHDRAW_CHANGED
+  else
     Reason = WG.WithdrawalBlockReason(Target.SlotId)
+    if not Reason and Target.CraftFilter then
+      local Filter = Target.CraftFilter
+      if Filter.WritProduct or Filter.CraftLevel ~= nil then
+        Reason = WG.WritItemBlockReason(Link, Filter.CraftLevel, Filter.CraftChampionPoints, Filter, 3, Target.SlotId)
+      elseif not WG.FulfillsWritConditions(Filter, Link, 3, Target.SlotId) then
+        Reason = WG.Lang.CHAT_WITHDRAW_CONDITION
+      end
+    end
   end
-   if Reason then
-    -- WG.ReportWithdrawalBlocked(Target.ItemLink, Reason)
+  if Reason then
+    if Target.Daily then WG.ReportWithdrawalBlocked(Target.ItemLink, Reason) end
     WG.GuildBankQueue(true)
     return
-   end
+  end
   local function BackpackCount()
     local Total = 0
     for Slot = 0, GetBagSize(1) - 1 do
-      if MatchesWithdrawalItem(GetItemLink(1, Slot), Target.ItemLink) then
+      local BagLink = GetItemLink(1, Slot)
+      local Matches
+      if MaxStack > 1 then
+        Matches = BagLink ~= "" and GetItemLinkItemId(BagLink) == GetItemLinkItemId(Link)
+      elseif Target.CraftFilter and Target.CraftFilter.CraftLevel ~= nil then
+        local Filter = Target.CraftFilter
+        Matches = BagLink ~= "" and GetItemLinkItemId(BagLink) == GetItemLinkItemId(Link)
+          and not WG.WritItemBlockReason(BagLink, Filter.CraftLevel, Filter.CraftChampionPoints, nil, 1, Slot)
+      else
+        Matches = MatchesWithdrawalItem(BagLink, Target.ItemLink)
+      end
+      if Matches then
         Total = Total + select(2, GetItemInfo(1, Slot))
       end
     end
@@ -838,7 +859,7 @@ local function TakeGuildBankItem(Target)
       if Error ~= nil then
         Failure = zo_strformat(WG.Lang.CHAT_WITHDRAW_ERROR, tostring(Error), GetString("SI_GUILDBANKRESULT", Error))
       elseif Context == "guild-changed" then Failure = WG.Lang.CHAT_WITHDRAW_GUILD_CHANGED end
-      --WG.ReportWithdrawalBlocked(Target.ItemLink, Failure, Target.GuildId)
+      if Target.Daily then WG.ReportWithdrawalBlocked(Target.ItemLink, Failure, Target.GuildId) end
     end)
 end
 
@@ -976,7 +997,8 @@ function WG.GuildBankWork(DoRemove)
   
   --ItemTake
   if bank.Type > 10 and bank.Type < 20 and bank.Type ~= WAREGUILD_TAKE_UNKNOWN then
-    local Slot = WG.FindItem(3, bank.ItemId, bank.ItemLink, bank)
+    local Slot = WG.FindItem(3, bank.ItemId, bank.ItemLink, bank, true)
+    local CraftFilter = (bank.WritProduct or bank.CraftLevel ~= nil or bank.Conditions) and bank or nil
     --TakeAll
     if bank.Type == WAREGUILD_TAKE_ALL then
       for i = 1, #Slot do
@@ -985,6 +1007,7 @@ function WG.GuildBankWork(DoRemove)
           ["SlotId"] = Slot[i]["SlotId"],
           ["ItemLink"] = GetItemLink(3, Slot[i]["SlotId"]),
           ["Count"] = Slot[i]["Count"],
+          CraftFilter = CraftFilter, Daily = bank.Daily,
         }
         table.insert(Queue, Tep)
       end
@@ -993,6 +1016,7 @@ function WG.GuildBankWork(DoRemove)
     if bank.Type == WAREGUILD_TAKE_TO then
       local BagSlot = WG.FindItem(1, bank.ItemId, bank.ItemLink, bank)
       local ToTake = bank.Count - BagSlot["Total"]
+      local NeededWithdrawal = ToTake > 0
       --Need to take
       if ToTake > 0 then
         --Not Enough Items
@@ -1003,7 +1027,7 @@ function WG.GuildBankWork(DoRemove)
               bank.ItemLink or ToLink(bank.ItemId)..WG.Lang.CHAT_FUZZY
             )
           )
-          if Slot["Total"] ~= 0 and WG.SV.NE_Take then
+          if Slot["Total"] ~= 0 and (WG.SV.NE_Take or bank.Daily) then
             Step[1]["Type"] = WAREGUILD_TAKE_ALL
           else
             table.remove(Step, 1)
@@ -1019,13 +1043,15 @@ function WG.GuildBankWork(DoRemove)
               ["SlotId"] = Slot[i]["SlotId"],
               ["ItemLink"] = GetItemLink(3, Slot[i]["SlotId"]),
               ["Count"] = Slot[i]["Count"],
+              CraftFilter = CraftFilter, Daily = bank.Daily,
             }
           table.insert(Queue, Tep)
           ToTake = ToTake - Slot[i]["Count"]
         end
       end
       --Need to Store Back
-      if ToTake < 0 then
+      if ToTake < 0 and (not bank.Daily or NeededWithdrawal) then
+        local BankTotal = WG.FindItem(3, bank.ItemId, bank.ItemLink, bank).Total
         table.insert(Step, 2, {
               ["GuildId"] = bank.GuildId,
               ["Type"] = WAREGUILD_STORE_TO,
@@ -1035,7 +1061,7 @@ function WG.GuildBankWork(DoRemove)
               ["CraftChampionPoints"] = bank.CraftChampionPoints,
               ["WritProduct"] = bank.WritProduct,
               ["Conditions"] = bank.Conditions,
-              ["Count"] = Slot["Total"] + BagSlot["Total"] - bank.Count,
+              ["Count"] = BankTotal + BagSlot["Total"] - bank.Count,
             })
       end
     end
@@ -1108,7 +1134,7 @@ function WG.GuildBankWork(DoRemove)
   --CraftTake
   if bank.Type > 30 then
     local Materials = WG.FindDailyItem()
-    for i = 1, #Materials do
+    for i = #Materials, 1, -1 do
       local Tep = {
         ["GuildId"] = bank.GuildId,
         ["Type"] = WAREGUILD_TAKE_TO,
@@ -1119,6 +1145,7 @@ function WG.GuildBankWork(DoRemove)
         ["WritProduct"] = Materials[i]["WritProduct"],
         ["Conditions"] = Materials[i]["Conditions"],
         ["Count"] = Materials[i]["Count"],
+        Daily = true,
       }
       table.insert(Step, 2, Tep)
     end

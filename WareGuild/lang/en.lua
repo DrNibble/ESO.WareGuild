@@ -38,6 +38,14 @@ WG.Lang = {
   ["CHAT_STORE_ALL_TYPE"] = "Store All <<1>> Materials", -- <<1>> Craft Type
   
   ["CHAT_DAILY_WRITS"] = "Withdraw Items for Daily Writs",
+  ["CONTEXT_TAKE"] = "Withdraw <<1>>",
+  ["CONTEXT_STORE"] = "Deposit <<1>>",
+  ["CONTEXT_TAKE_COUNT"] = "Target quantity in backpack",
+  ["CONTEXT_STORE_COUNT"] = "Target quantity in guild bank",
+  ["CONTEXT_ALL"] = "All stacks",
+  ["CONTEXT_GUILDS"] = "Add the rule to these guilds:",
+  ["CONTEXT_NO_GUILD"] = "No guild configured",
+  ["CONTEXT_SAVE"] = "Add rule",
   
   ["CHAT_NE_TAKE"] = "[<<1>>] Not Enough <<2>> to Withdraw", -- <<1>> Guild Name, <<2>> ItemName
   ["CHAT_NE_STORE"] = "[<<1>>] Not Enough <<2>> to Store", -- <<1>> Guild Name, <<2>> ItemName
@@ -61,7 +69,7 @@ WG.Lang = {
   ["CHAT_WITHDRAW_LEVEL"] = "level mismatch: expected <<1>> / CP <<2>>, found <<3>> / CP <<4>>",
   ["CHAT_WITHDRAW_CONDITION"] = "item not accepted by the journal quest condition",
   ["CHAT_WITHDRAW_NOTICE"] = "[<<1>>] <<2>>: <<3>>.",
-  ["CHAT_WITHDRAW_REFERENCE"] = "reference craft level unavailable away from a crafting station; exact level not compared, the journal condition validates the material tier",
+  ["CHAT_WITHDRAW_REFERENCE"] = "cannot verify the required craft level; looking for materials instead",
   ["CHAT_WITHDRAW_DATA"] = "item/crafting-material mapping missing from WareGuild data",
   ["CHAT_WITHDRAW_NOT_FOUND"] = "no matching item found in this bank; check the guild selected for this step",
   ["CHAT_WITHDRAW_DISABLED"] = "finished-item retrieval disabled; looking for materials instead",

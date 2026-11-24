@@ -38,6 +38,14 @@ WG.Lang = {
   ["CHAT_STORE_ALL_TYPE"] = "Déposer tous les matériaux <<1>>", -- <<1>> Craft Type
   
   ["CHAT_DAILY_WRITS"] = "Retirer les objets pour les commandes journalières",
+  ["CONTEXT_TAKE"] = "Prendre <<1>>",
+  ["CONTEXT_STORE"] = "Déposer <<1>>",
+  ["CONTEXT_TAKE_COUNT"] = "Quantité cible dans le sac",
+  ["CONTEXT_STORE_COUNT"] = "Quantité cible en banque de guilde",
+  ["CONTEXT_ALL"] = "Toutes les piles",
+  ["CONTEXT_GUILDS"] = "Ajouter la règle à ces guildes :",
+  ["CONTEXT_NO_GUILD"] = "Aucune guilde configurée",
+  ["CONTEXT_SAVE"] = "Ajouter la règle",
   
   ["CHAT_NE_TAKE"] = "[<<1>>] Quantité insuffisante de <<2>> à retirer", -- <<1>> Guild Name, <<2>> ItemName
   ["CHAT_NE_STORE"] = "[<<1>>] Quantité insuffisante de <<2>> à déposer", -- <<1>> Guild Name, <<2>> ItemName
@@ -61,7 +69,7 @@ WG.Lang = {
   ["CHAT_WITHDRAW_LEVEL"] = "niveau incompatible : attendu <<1>> / PC <<2>>, trouvé <<3>> / PC <<4>>",
   ["CHAT_WITHDRAW_CONDITION"] = "objet non accepté par la condition du journal de quêtes",
   ["CHAT_WITHDRAW_NOTICE"] = "[<<1>>] <<2>> : <<3>>.",
-  ["CHAT_WITHDRAW_REFERENCE"] = "niveau de craft de référence indisponible hors établi d'artisanat ; niveau exact non comparé, la condition du journal valide le palier du matériau",
+  ["CHAT_WITHDRAW_REFERENCE"] = "niveau de fabrication requis invérifiable ; recherche des matériaux à la place",
   ["CHAT_WITHDRAW_DATA"] = "correspondance objet/matériau de craft absente des données WareGuild",
   ["CHAT_WITHDRAW_NOT_FOUND"] = "aucun exemplaire compatible trouvé dans cette banque ; vérifier la guilde choisie pour cette étape",
   ["CHAT_WITHDRAW_DISABLED"] = "option de récupération des objets finis désactivée ; recherche des matériaux à la place",

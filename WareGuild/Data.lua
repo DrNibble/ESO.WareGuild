@@ -420,22 +420,44 @@ local function ProductTotal(ItemId)
   return WG.FindItem(1, ItemId, nil)["Total"] + WG.FindItem(3, ItemId, nil)["Total"]
 end
 
---Count the Daily Writs Products: Any Style, No Trait, White Quality Only
---(a Gear ItemId Does Not Encode the Trait or the Quality, So the Bank
---Stacks Are Checked With GetItemLinkQuality / GetItemLinkTraitInfo)
-local function SmithingProductTotal(ItemId)
-  local Total = 0
-  for _, BagId in ipairs({1, 3}) do
-    local Slot = WG.FindItem(BagId, ItemId, nil)
-    for i = 1, #Slot do
-      local Link = GetItemLink(BagId, Slot[i]["SlotId"])
-      if GetItemLinkQuality(Link) == ITEM_QUALITY_NORMAL
-        and GetItemLinkTraitInfo(Link) == ITEM_TRAIT_TYPE_NONE then
-        Total = Total + Slot[i]["Count"]
-      end
+--Daily smithing writs use the first craftable level of their material.
+--Keys are real material item IDs from MaterialExcel, not quest IDs or pattern indices.
+--See https://en.uesp.net/wiki/Template:Online_Equipment_Crafting_Materials
+local DailyMaterialLevels = {}
+local function RegisterMaterialLevels(Ids, Levels)
+  for Index, Id in ipairs(Ids) do DailyMaterialLevels[Id] = Levels[Index] end
+end
+--Positive values are character levels; negative values are Champion Points.
+local SmithingLevels = {1, 16, 26, 36, 46, -10, -40, -70, -90, -150}
+RegisterMaterialLevels({5413, 4487, 23107, 6000, 6001, 46127, 46128, 46129, 46130, 64489}, SmithingLevels)
+RegisterMaterialLevels({811, 4463, 23125, 23126, 23127, 46131, 46132, 46133, 46134, 64504}, SmithingLevels)
+RegisterMaterialLevels({794, 4447, 23099, 23100, 23101, 46135, 46136, 46137, 46138, 64506}, SmithingLevels)
+RegisterMaterialLevels({803, 533, 23121, 23122, 23123, 46139, 46140, 46141, 46142, 64502}, SmithingLevels)
+RegisterMaterialLevels({135138, 135140, 135142, 135144, 135146}, {1, 26, -10, -70, -150})
+
+local function LinkCraftLevel(Link)
+  if not Link or Link == "" then return end
+  local Level, CP = GetItemLinkRequiredLevel(Link), GetItemLinkRequiredChampionPoints(Link)
+  if Level and Level > 0 and CP then return Level, CP end
+end
+
+local function ProductKey(Id, Filter)
+  if not Filter or Filter.CraftLevel == nil then return Id end
+  return Id .. ":" .. Filter.CraftLevel .. ":" .. Filter.CraftChampionPoints
+end
+
+local function ClaimSlots(Slots, Reserved, Need)
+  local Total, First = 0, nil
+  for _, Slot in ipairs(Slots) do
+    local Available = Slot.Count - (Reserved[Slot.SlotId] or 0)
+    if Available > 0 then
+      local Count = math.min(Available, Need - Total)
+      Reserved[Slot.SlotId] = Slot.Count - Available + Count
+      Total, First = Total + Count, First or Slot.SlotId
+      if Total == Need then break end
     end
   end
-  return Total
+  return Total, First
 end
 
 --LazyCrafting (LibLazyCrafting) Queue
@@ -451,9 +473,9 @@ end
 --Writs). A Request With a Trait or a Set Cannot Be Fulfilled by Such a
 --Product: Materials Only. Jewelry (Station 7), Enchanting, Alchemy and
 --Provisioning Are Supported Too When LibLazyCrafting Queues Them.
---Returns: Materials[ItemId] = Count, Products[ItemId] = {ItemLink, Count},
+--Returns: Materials[ItemId] = Count, Products[ProductKey] = {ItemId, ItemLink, Count, ...},
 --Replaced[ItemId] = Count (Materials Covered by the Products)
-function WG.FindLazyCraftingItem()
+function WG.FindLazyCraftingItem(DailySmithing, DailyClaims)
   local Materials = {}
   local Products = {}
   local Replaced = {}
@@ -469,11 +491,13 @@ function WG.FindLazyCraftingItem()
   end
 
   --Add a Finished Product to Retrieve
-  local function AddProduct(ItemId, ItemLink, Count)
-    if not Products[ItemId] then
-      Products[ItemId] = {["ItemLink"] = ItemLink, ["Count"] = 0}
+  local function AddProduct(ItemId, ItemLink, Count, Filter)
+    local Key = ProductKey(ItemId, Filter)
+    if not Products[Key] then
+      Products[Key] = {ItemId = ItemId, ItemLink = ItemLink, Count = 0,
+        CraftLevel = Filter and Filter.CraftLevel, CraftChampionPoints = Filter and Filter.CraftChampionPoints}
     end
-    Products[ItemId]["Count"] = Products[ItemId]["Count"] + Count
+    Products[Key].Count = Products[Key].Count + Count
   end
 
   --Cover Materials With the Available Products
@@ -491,6 +515,7 @@ function WG.FindLazyCraftingItem()
     [CRAFTING_TYPE_JEWELRYCRAFTING] = true,
   }
 
+  local BagClaims, BankClaims, JournalOverlap = {}, DailyClaims or {}, {}
   --Smithing Request (BlackSmith/Clothier/Woodworking/Jewelry)
   local function HandleSmithing(Request)
     if Request["type"] ~= "smithing" then return end
@@ -499,36 +524,46 @@ function WG.FindLazyCraftingItem()
     local Num = Request["smithingQuantity"] or 1
     --Finished Product (Sword, Helmet, Staff, Shield...)
     --No Trait and No Set Only: Writ Products Are White, No Trait, Any Style
-    local Have = 0
-    local ProductId, ProductLink
-    if WG.SV.LazyCraftingProduct
-      and (Request["trait"] == nil or Request["trait"] == 1)
-      and (Request["setIndex"] == nil or Request["setIndex"] == 0) then
+    local ProductId, ProductLink, Filter
+    if (Request["trait"] == nil or Request["trait"] == 1)
+      and (Request["setIndex"] == nil or Request["setIndex"] == 0)
+      and (Request["quality"] == nil or Request["quality"] == ITEM_QUALITY_NORMAL) then
       --The Style Does Not Change the ItemId: Use Any Style
       local Style = type(Request["style"]) == "number" and Request["style"] or 1
       ProductLink = GetSmithingPatternResultLink(
         Request["pattern"], Request["materialIndex"],
         Request["materialQuantity"] or 1, Style, 1, 0)
-      if ProductLink and ProductLink ~= "" then
+      local Level, CP = LinkCraftLevel(ProductLink)
+      if Level then
         ProductId = GetItemLinkItemId(ProductLink)
-        if not ProductId or ProductId == 0 then ProductId = nil end
-      end
-      if ProductId then
-        Have = math.min(Num, SmithingProductTotal(ProductId))
+        if ProductId and ProductId ~= 0 then
+          Filter = {CraftLevel = Level, CraftChampionPoints = CP}
+        end
       end
     end
+    if Filter and DailySmithing then
+      local Key = ProductKey(ProductId, Filter)
+      local Overlap = math.min(Num, (DailySmithing[Key] or 0) - (JournalOverlap[Key] or 0))
+      Num, JournalOverlap[Key] = Num - Overlap, (JournalOverlap[Key] or 0) + Overlap
+    end
+    if Num <= 0 then return end
     --Material Link of this Pattern and Tier
     local Link = GetSmithingPatternMaterialItemLink(Request["pattern"], Request["materialIndex"], 0)
     local ItemId, Per
-    if Link ~= "" then
+    if Link and Link ~= "" then
       ItemId = GetItemLinkItemId(Link)
       Per = Request["materialQuantity"] or 0
     end
     --Take the Finished Product Instead of the Materials
-    if Have > 0 and ItemId and ItemId ~= 0 and Per > 0 then
-      Num = Num - Have
-      AddProduct(ProductId, ProductLink, Have)
-      AddReplaced(ItemId, Per * Have)
+    if Filter and WG.SV.LazyCraftingProduct and ItemId and ItemId ~= 0 and Per > 0 then
+      local InBag = ClaimSlots(WG.FindItem(1, ProductId, nil, Filter), BagClaims, Num)
+      local InBank = 0
+      if InBag < Num then
+        InBank = ClaimSlots(WG.FindItem(3, ProductId, nil, Filter, true), BankClaims, Num - InBag)
+      end
+      Num = Num - InBag - InBank
+      if InBank > 0 then AddProduct(ProductId, ProductLink, InBank, Filter) end
+      AddReplaced(ItemId, Per * (InBag + InBank))
     end
     --Materials for the Items Still to Craft
     if Num > 0 and ItemId and ItemId ~= 0 and Per > 0 then
@@ -714,27 +749,47 @@ function WG.FindDailyItem()
   }
   --Finished Products (Sword, Helmet, Staff, Shield, Glyph, Potion, Food...)
   --[ItemId] = {["ItemLink"], ["Count"] (Units Claimed From the Guild Bank)}
-  local Products = {}
-  local function AddProduct(ItemId, ItemLink, Count, CraftLevel, CraftChampionPoints, WritProduct, Condition)
+  local Products, SmithingNeeds, BankClaims = {}, {}, {}
+  local function AddProduct(ItemId, ItemLink, Count, Filter, Condition, FromQueue)
     if not ItemId or ItemId == 0 or not Count or Count <= 0 then return end
-    local Old = Products[ItemId]
+    local Key = ProductKey(ItemId, Filter)
+    local Old = Products[Key]
     if Old then
-      --Several Sources (Writ Conditions and LazyCrafting) May Claim the Same Product
-      --The Actual Take is Capped by the Guild Bank Availability
-      Old["Count"] = Old["Count"] + Count
-      if WritProduct then Old["WritProduct"] = true end
-      if Condition then
-        Old["Conditions"] = Old["Conditions"] or {}
-        table.insert(Old["Conditions"], Condition)
-      end
+      --Smithing stock is already reserved separately. For glyphs reported
+      --by both sources, do not add the same demand twice.
+      Old.Count = (FromQueue and not Filter) and math.max(Old.Count, Count) or Old.Count + Count
+      if Condition then table.insert(Old.Conditions, Condition) end
+      if FromQueue then Old.Conditions = nil end
     else
-      Products[ItemId] = {
-        ["ItemLink"] = ItemLink, ["Count"] = Count,
-        ["CraftLevel"] = CraftLevel, ["CraftChampionPoints"] = CraftChampionPoints,
-        ["WritProduct"] = WritProduct,
-        ["Conditions"] = Condition and {Condition} or nil,
+      Products[Key] = {
+        ItemId = ItemId, ItemLink = ItemLink, Count = Count,
+        CraftLevel = Filter and Filter.CraftLevel, CraftChampionPoints = Filter and Filter.CraftChampionPoints,
+        WritProduct = Filter ~= nil and Condition ~= nil, Conditions = Condition and {Condition} or nil,
       }
     end
+  end
+  local function ClaimFinishedItems(Quest, Index, Need)
+    local Condition = {Quest, Index}
+    local Have = 0
+    for Slot in WG.GuildBankSlots do
+      local Link = GetItemLink(3, Slot)
+      if Link ~= "" and WG.FulfillsWritConditions({Conditions = {Condition}}, Link, 3, Slot) then
+        local Reason = WG.WithdrawalBlockReason(Slot)
+        if Reason then WG.ReportWithdrawalBlocked(Link, Reason)
+        else
+          local Count = select(2, GetItemInfo(3, Slot))
+          local Used = BankClaims[Slot] or 0
+          local Take = math.min(Count - Used, Need - Have)
+          if Take > 0 then
+            BankClaims[Slot] = Used + Take
+            AddProduct(GetItemLinkItemId(Link), Link, Take, nil, Condition)
+            Have = Have + Take
+            if Have == Need then break end
+          end
+        end
+      end
+    end
+    return Have
   end
   --Check Quests
   for a = 1, 25 do
@@ -743,7 +798,7 @@ function WG.FindDailyItem()
     if Type == 4 and not GetQuestConditionMasterWritInfo(a, 1, 1) then
       --Writ Condition
       local Enchant2T
-      for b = 1, 6 do
+      for b = 1, GetJournalQuestNumConditions(a, 1) do
         local ItemId, MaterialId, CraftType, Quilty = GetQuestConditionItemInfo(a, 1, b)
         local NumHold, NumCondition = GetJournalQuestConditionValues(a, 1, b) 
         local Need = NumCondition - NumHold
@@ -753,61 +808,47 @@ function WG.FindDailyItem()
             --Finished Product (Shield, Sword, Staff, Helmet...) in the Guild Bank
             --Fulfilling the Writ: Take It Instead of the Raw Materials
             --White, no Trait, and the Exact Craft Level Required by the Writ
-            local Have = 0
-            if WG.SV.LazyCraftingProduct then
-              local Recipe = WG.MaterialExcel[CraftType] and WG.MaterialExcel[CraftType][ItemId]
-              Recipe = Recipe and Recipe[MaterialId]
+            local Have, ReferenceLink = 0, nil
+            local Recipes = WG.MaterialExcel[CraftType][ItemId]
+            local Recipe = Recipes and Recipes[MaterialId]
+            local CraftLevel, CP
+            if Recipe then
+              local Tier = DailyMaterialLevels[Recipe[1]]
+              if Tier then CraftLevel, CP = Tier > 0 and Tier or 50, Tier > 0 and 0 or -Tier end
               local Pattern, MaterialIndex = GetSmithingPatternInfoForItemId(ItemId, MaterialId, CraftType)
-              local ReferenceLink
-              if Pattern and MaterialIndex and Recipe then
-                local _, NumPer = unpack(Recipe)
-                ReferenceLink = GetSmithingPatternResultLink(Pattern, MaterialIndex, NumPer, 1, 1, 0)
-              end
-              --The Pattern List Only Exists at a Crafting Station: at the Guild Bank the Reference
-              --Link is Empty. The Level is Never Guessed: Without it the Exact Level is Not Compared,
-              --and the Journal Condition (Tier of the Writ Material), Quality and Trait Decide
-              local CraftLevel, CraftChampionPoints
-              if ReferenceLink and ReferenceLink ~= "" then
-                CraftLevel = GetItemLinkRequiredLevel(ReferenceLink)
-                CraftChampionPoints = GetItemLinkRequiredChampionPoints(ReferenceLink)
-              end
-              if CraftLevel == nil or CraftChampionPoints == nil then
-                CraftLevel, CraftChampionPoints = nil, nil
-                WG.ReportWithdrawalNotice(ToLink(ItemId), WG.Lang.CHAT_WITHDRAW_REFERENCE)
-              end
-              do
-                local SawCandidate = false
-                for i in WG.GuildBankSlots do
-                  local ItemLink = GetItemLink(3, i)
-                  local Fulfills = ItemLink ~= "" and DoesItemLinkFulfillJournalQuestCondition(
-                    ItemLink, a, 1, b, GetItemCreatorName(3, i) == GetUnitName("player"))
-                  if ItemLink ~= "" and Have < Need and (Fulfills or GetItemLinkItemId(ItemLink) == ItemId) then
-                    SawCandidate = true
-                    local Reason = WG.WithdrawalBlockReason(i)
-                      or WG.WritItemBlockReason(ItemLink, CraftLevel, CraftChampionPoints)
-                    if not Reason and not Fulfills then Reason = WG.Lang.CHAT_WITHDRAW_CONDITION end
-                    if Reason then WG.ReportWithdrawalBlocked(ItemLink, Reason)
-                    else
-                      local Count = select(2, GetItemInfo(3, i))
-                      AddProduct(GetItemLinkItemId(ItemLink), ItemLink, Count, CraftLevel, CraftChampionPoints, true, {a, b})
-                      Have = Have + Count
-                    end
-                  end
-                end
-                if not SawCandidate then
-                  WG.ReportWithdrawalBlocked(
-                    (ReferenceLink and ReferenceLink ~= "") and ReferenceLink or ToLink(ItemId),
-                    WG.Lang.CHAT_WITHDRAW_NOT_FOUND)
+              if Pattern and MaterialIndex then
+                ReferenceLink = GetSmithingPatternResultLink(Pattern, MaterialIndex, Recipe[2], 1, 1, 0)
+                local Level, ReferenceCP = LinkCraftLevel(ReferenceLink)
+                if Level and GetItemLinkItemId(ReferenceLink) == ItemId
+                  and (not Tier or (Level == CraftLevel and ReferenceCP == CP)) then
+                  CraftLevel, CP = Level, ReferenceCP
+                else
+                  ReferenceLink = nil
                 end
               end
-            else
-              WG.ReportWithdrawalBlocked(ToLink(ItemId), WG.Lang.CHAT_WITHDRAW_DISABLED)
+            end
+            if CraftLevel then
+              local Condition = {a, b}
+              local Filter = {CraftLevel = CraftLevel, CraftChampionPoints = CP, Conditions = {Condition}}
+              local Key = ProductKey(ItemId, Filter)
+              SmithingNeeds[Key] = (SmithingNeeds[Key] or 0) + Need
+              if WG.SV.LazyCraftingProduct then
+                local First
+                Have, First = ClaimSlots(WG.FindItem(3, ItemId, nil, Filter, true), BankClaims, Need)
+                if First then
+                  AddProduct(ItemId, GetItemLink(3, First), Have, Filter, Condition)
+                elseif #WG.FindItem(3, ItemId) == 0 then
+                  WG.ReportWithdrawalBlocked(ReferenceLink or ToLink(ItemId), WG.Lang.CHAT_WITHDRAW_NOT_FOUND)
+                end
+              else
+                WG.ReportWithdrawalBlocked(ToLink(ItemId), WG.Lang.CHAT_WITHDRAW_DISABLED)
+              end
+            elseif Recipe and WG.SV.LazyCraftingProduct then
+              WG.ReportWithdrawalNotice(ToLink(ItemId), WG.Lang.CHAT_WITHDRAW_REFERENCE)
             end
             --Raw Materials for the Items Still to Craft
             local Missing = Need - Have
             if Missing > 0 then
-              local Recipe = WG.MaterialExcel[CraftType] and WG.MaterialExcel[CraftType][ItemId]
-              Recipe = Recipe and Recipe[MaterialId]
               if Recipe then
                 local RawId, NumPer = unpack(Recipe)
                 SmithM[RawId] = SmithM[RawId] or 0
@@ -819,14 +860,7 @@ function WG.FindDailyItem()
           end
           --Alchemy and Cook Production
           if Need > 0 and ((CraftType == 4 and MaterialId ~= 0) or CraftType == 5) then
-            for i in WG.GuildBankSlots do
-              local ItemLink = GetItemLink(3, i)
-              if ItemLink ~= "" and DoesItemLinkFulfillJournalQuestCondition(ItemLink, a, 1, b, GetItemCreatorName(3, i) == GetUnitName("player")) then
-                local Reason = WG.WithdrawalBlockReason(i)
-                if Reason then WG.ReportWithdrawalBlocked(ItemLink, Reason)
-                else table.insert(Materials, {["ItemLink"] = ItemLink, ["Count"] = 1}) end
-              end
-            end
+            ClaimFinishedItems(a, b, Need)
           end
           --Alchemy Raw Materials
           if Need > 0 and CraftType == 4 and MaterialId == 0 then
@@ -836,22 +870,7 @@ function WG.FindDailyItem()
           --Enchant Production
           if Need > 0 and CraftType == 3 and MaterialId ~= 0 then
             --Finished Glyph in the Guild Bank Fulfilling the Writ
-            local Have = 0
-            if WG.SV.LazyCraftingProduct then
-              for i in WG.GuildBankSlots do
-                local ItemLink = GetItemLink(3, i)
-                if ItemLink ~= "" and Have < Need
-                  and DoesItemLinkFulfillJournalQuestCondition(ItemLink, a, 1, b, GetItemCreatorName(3, i) == GetUnitName("player")) then
-                  local Reason = WG.WithdrawalBlockReason(i)
-                  if Reason then WG.ReportWithdrawalBlocked(ItemLink, Reason)
-                  else
-                    local Count = select(2, GetItemInfo(3, i))
-                    AddProduct(GetItemLinkItemId(ItemLink), ItemLink, Count)
-                    Have = Have + Count
-                  end
-                end
-              end
-            end
+            local Have = WG.SV.LazyCraftingProduct and ClaimFinishedItems(a, b, Need) or 0
             --Runes for the Glyphs Still to Craft
             if Need - Have > 0 then
               local Fork, Rule1 = unpack(WG.MaterialExcel[CraftType]["Id"][ItemId])
@@ -882,13 +901,7 @@ function WG.FindDailyItem()
   end
   --LazyCrafting Queue (Items to Craft: Steel/Textile/Wood)
   --Finished Products Available Replace the Raw Materials
-  local LazyM, LazyP, LazyR = WG.FindLazyCraftingItem()
-  --Products Cover the Writ Crafts Too: Reduce the Writ Material Need
-  for ItemId, Count in pairs(LazyR) do
-    if SmithM[ItemId] then
-      SmithM[ItemId] = math.max(0, SmithM[ItemId] - Count)
-    end
-  end
+  local LazyM, LazyP = WG.FindLazyCraftingItem(SmithingNeeds, BankClaims)
   --Take Max Per Item to Avoid Double Counting with the Writ Conditions
   for ItemId, Count in pairs(LazyM) do
     if not SmithM[ItemId] or SmithM[ItemId] < Count then
@@ -903,12 +916,13 @@ function WG.FindDailyItem()
     end
   end
   --LazyCrafting Products Merge With the Writ Products
-  for ItemId, Product in pairs(LazyP) do
-    AddProduct(ItemId, Product["ItemLink"], Product["Count"])
+  for _, Product in pairs(LazyP) do
+    AddProduct(Product.ItemId, Product.ItemLink, Product.Count, Product.CraftLevel and Product, nil, true)
   end
   --Finished Products (Sword, Helmet, Staff, Shield, Glyph, Potion, Food...)
   --Retrieve Them from the Guild Bank Instead of the Materials
-  for ItemId, Product in pairs(Products) do
+  for _, Product in pairs(Products) do
+    local ItemId = Product.ItemId
     --Target: Keep (Current Backbag + Claimed) in the Backbag
     --The Actual Take is Capped by the Guild Bank Availability
     local Target = WG.FindItem(1, ItemId, Product["ItemLink"], Product)["Total"] + Product["Count"]

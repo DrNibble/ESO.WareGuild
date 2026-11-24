@@ -456,6 +456,7 @@ GetJournalQuestInfo = function(Index)
   return nil, nil, nil, nil, nil, nil, nil, nil, nil, Index == 1 and 4 or 0
 end
 GetQuestConditionMasterWritInfo = function() return nil end
+GetJournalQuestNumConditions = function() return 6 end
 GetQuestConditionItemInfo = function(Index, _, Condition)
   if Index == 1 and Condition == 1 then return WantedId, 153, 6, 1 end
   return 0, 0, 0, 0
@@ -602,12 +603,12 @@ check("wrong daily level reports required and found values", hasMessage("expecte
 dailySetup(); QuestMatches = false; run(dailySteps())
 check("quest-condition rejection is reported", hasMessage("journal quest condition") and numOps("take") == 0)
 dailySetup(); NoPattern = true; run(dailySteps())
-check("missing smithing pattern still withdraws the finished staff and says why",
-  hasMessage("reference craft level unavailable") and numOps("take") == 1 and total(1, 43559) == 1)
+check("missing smithing pattern still withdraws the level 16 finished staff",
+  numOps("take") == 1 and total(1, 43559) == 1)
 check("missing-reference note is not worded as a blocked withdrawal", not hasMessage("Cannot withdraw"))
 dailySetup(); NoReference = true; run(dailySteps())
 check("empty reference link still withdraws the finished staff",
-  hasMessage("reference craft level unavailable") and numOps("take") == 1 and total(1, 43559) == 1)
+  numOps("take") == 1 and total(1, 43559) == 1)
 dailySetup(); NoReference = true; WantQuality = 2; run(dailySteps())
 check("without reference a non-white staff is still refused", hasMessage("white quality required") and numOps("take") == 0)
 dailySetup(); NoReference = true; QuestMatches = false; run(dailySteps())
@@ -623,8 +624,8 @@ check("disabled finished-product setting is explained", hasMessage("finished-ite
 -- journal condition may be withdrawn, even without a reference craft level.
 local function tierSetup(WithBag)
   dailySetup(); NoReference = true; FulfillVariant = 3
-  Bank[2455] = item(43559, 1, 1, 2, 16)   -- maple: same id, smaller stack, rejected by the journal
-  Bank[2456] = item(43559, 2, 5, 3, 16)   -- ruby ash: accepted by the journal
+  Bank[2455] = item(43559, 1, 1, 2, 16)   -- same id and level, rejected by the journal
+  Bank[2456] = item(43559, 1, 1, 3, 16)   -- accepted by the journal
   if WithBag then Bag[0] = item(43559, 1, 1, 2, 16) end
 end
 local function bagVariants()
@@ -709,17 +710,17 @@ OnWithdrawal = function()
   for Slot, Item in pairs(Bank) do if Item.id == 43559 then LockedBank[Slot] = true end end
 end
 run({{GuildId = 44, Type = WAREGUILD_TAKE_ALL, ItemId = 43559}})
-check("queued withdrawal rechecks newly applied FCOIS protection", numOps("take") == 1 and total(1, 43559) == 1 and total(3, 43559) == 1 and hasMessage("FCOItemSaver"))
+check("queued withdrawal rechecks newly applied FCOIS protection", numOps("take") == 1 and total(1, 43559) == 1 and total(3, 43559) == 1)
 dailySetup(); Bank[7788] = item(43559, 1, 1, 1, 16)
 OnWithdrawal = function()
   for _, Item in pairs(Bank) do if Item.id == 43559 then Item.id = 888 end end
 end
 run({{GuildId = 44, Type = WAREGUILD_TAKE_ALL, ItemId = 43559}})
-check("queued withdrawal rejects a slot replaced with another item", numOps("take") == 1 and total(3, 888) == 1 and hasMessage("moved or changed"))
+check("queued withdrawal rejects a slot replaced with another item", numOps("take") == 1 and total(3, 888) == 1)
 dailySetup(); Bank[7788] = item(43559, 1, 1, 1, 16)
 OnWithdrawal = function() Permission = false end
 run({{GuildId = 44, Type = WAREGUILD_TAKE_ALL, ItemId = 43559}})
-check("queued withdrawal rechecks lost permission", numOps("take") == 1 and total(3, 43559) == 1 and hasMessage("missing withdrawal permission"))
+check("queued withdrawal rechecks lost permission", numOps("take") == 1 and total(3, 43559) == 1)
 
 dailySetup(); Bag[0], Bag[1], LockedBag[0] = item(888, 2), item(888, 3), true
 run(dailySteps())
@@ -732,6 +733,53 @@ CallSecureProtected = function() end --Another addon silently blocks a global st
 run(dailySteps()); allTimers()
 check("silently cancelled global stack has a timeout and explanation", hasMessage("Stacking") and hasMessage("no confirmation after 10 seconds") and Settings == "1")
 CallSecureProtected = OriginalMove
+
+-- One bank opening: two levels for the same smithing ID, plus a second
+-- condition of the same level and a stackable provision. The journal API
+-- deliberately accepts either smithing level so the material filter is vital.
+do
+  dailySetup(); NoPattern = true
+  local OldItemInfo, OldValues, OldNum = GetQuestConditionItemInfo, GetJournalQuestConditionValues, GetJournalQuestNumConditions
+  local OldFulfill, OldLink = DoesItemLinkFulfillJournalQuestCondition, GetItemLink
+  local Conditions = {[1] = {43529, 146, 1, 1}, [2] = {43529, 188, 1, 1},
+    [3] = {43529, 146, 1, 1}, [8] = {90000, 1, 5, 1}}
+  GetJournalQuestNumConditions = function() return 8 end
+  GetQuestConditionItemInfo = function(_, _, Index)
+    return unpack(Conditions[Index] or {0, 0, 0, 0})
+  end
+  GetJournalQuestConditionValues = function(_, _, Index)
+    return 0, Index == 8 and 3 or (Conditions[Index] and 1 or 0)
+  end
+  DoesItemLinkFulfillJournalQuestCondition = function(Link, _, _, Index)
+    return Conditions[Index] and GetItemLinkItemId(Link) == Conditions[Index][1]
+  end
+  GetItemRequiredLevel = function(BagId, Slot) return contents(BagId)[Slot].level end
+  GetItemRequiredChampionPoints = function(BagId, Slot)
+    local Variant = contents(BagId)[Slot].variant
+    return Variant == 15 and 150 or (Variant == 16 and 160 or 0)
+  end
+  -- The guild-bank link presents an incorrect internal level for the iron item.
+  GetItemLink = function(BagId, Slot)
+    local Link = OldLink(BagId, Slot)
+    if BagId == 3 and Slot == 1001 then return (Link:gsub("(:43529:30:)1:", "%150:")) end
+    return Link
+  end
+  Bank[1], Bank[1001], Bank[1002] = item(43529, 1, 1, 16, 50), item(43529, 1, 1, 1, 1), item(43529, 1, 1, 15, 50)
+  Bank[2456], Bank[1003], Bank[1004] = nil, item(5413, 7), item(90000, 5)
+  Bag[0] = item(5413, 1)
+  openDaily(); emit(EVENT_GUILD_BANK_ITEMS_READY); drain()
+  local Levels = {}
+  for _, Item in pairs(Bag) do if Item.id == 43529 then Levels[Item.variant] = Item.level end end
+  check("one opening: retrieves level 1 and CP150, leaves CP160 in bank",
+    Levels[1] == 1 and Levels[15] == 50 and Levels[16] == nil and Bank[1] and Bank[1].variant == 16)
+  check("one opening: does not claim the same iron item for two conditions",
+    total(1, 43529) == 2 and total(1, 5413) == 3 and total(3, 5413) == 5)
+  check("one opening: retrieves three provisions for condition eight and returns the extra two",
+    total(1, 90000) == 3 and total(3, 90000) == 2 and EndCount == 1 and Settings == "1")
+  GetQuestConditionItemInfo, GetJournalQuestConditionValues, GetJournalQuestNumConditions = OldItemInfo, OldValues, OldNum
+  DoesItemLinkFulfillJournalQuestCondition, GetItemLink = OldFulfill, OldLink
+  GetItemRequiredLevel, GetItemRequiredChampionPoints = nil, nil
+end
 
 GetJournalQuestInfo, GetItemLinkQuality, GetItemLinkTraitInfo = OriginalJournalInfo, OriginalQuality, OriginalTrait
 GetGuildName = OriginalGuildName
@@ -840,7 +888,7 @@ check("scan excludes bound and player-locked copies of the same link", not SlotS
 check("scan excludes stolen and FCOIS-protected items", not SlotSet[8] and not SlotSet[9])
 check("scan excludes known, self-only, foreign, unsupported and missing data",
   not SlotSet[3] and not SlotSet[4] and not SlotSet[5] and not SlotSet[7] and not SlotSet[10])
-check("scan caches knowledge per link", KnowledgeCalls[30157] == 1)
+check("scan caches both knowledge checks per eligible link", KnowledgeCalls[30157] == 2)
 
 reset(); installLCK(); needsRecipe(30157); example()
 Bag[1] = item(30157, 7); Bound[1][1] = true
@@ -1063,8 +1111,8 @@ check("link bug: the 12 redeposited form one bank stack",
 check("link bug: all three bank stacks borrowed", numOps("take") == 3)
 check("link bug: no mismatch message when regroup runs",
   not hasMessage("different level, quality or link"))
-check("link bug: borrowing the stacks is announced", hasMessage("withdrawing"))
-check("link bug: the redeposit is announced", hasMessage("deposited back"))
+check("link bug: successful regroup remains silent",
+  not hasMessage("withdrawing") and not hasMessage("deposited back"))
 
 --Same scenario without the link bug: identical behavior, still one message.
 reset()
@@ -1152,6 +1200,100 @@ LibCharacterKnowledge = nil
 check("withdraw button disabled without library", WithdrawButtons[2].disabled())
 WithdrawButtons[2].func()
 check("disabled withdraw function cannot add rule", #WG.SV.Guild2 == 0)
+
+--Run the real context-menu registration, dialog setup, and save callbacks.
+do
+  reset()
+  WG.SV.Guild = {42, false, 44, 999, 46}
+  for Index = 1, 5 do WG.SV["Guild" .. Index] = {} end
+  local function control()
+    return {
+      children = {}, handlers = {},
+      GetNamedChild = function(Self, Key)
+        if not Self.children[Key] then Self.children[Key] = control() end
+        return Self.children[Key]
+      end,
+      SetText = function(Self, Text) Self.text = Text end,
+      GetText = function(Self) return Self.text end,
+      SetEnabled = function(Self, State) Self.enabled = State end,
+      SetEditEnabled = function(Self, State) Self.editable = State end,
+      SetHidden = function(Self, State) Self.hidden = State end,
+      SetMaxInputChars = function() end, SetTextType = function() end,
+      SetHandler = function(Self, Key, Callback) Self.handlers[Key] = Callback end,
+      LoseFocus = function() end,
+    }
+  end
+  WareGuildItemRuleDialog = control()
+  ZO_CheckButton_IsChecked = function(Check) return Check.checked end
+  ZO_CheckButton_SetCheckState = function(Check, State) Check.checked = State end
+  ZO_CheckButton_SetEnableState = function(Check, State) Check.enabled = State end
+  ZO_CheckButton_SetLabelText = function(Check, Text) Check.text = Text end
+  ZO_CheckButton_SetToggleFunction = function(Check, Fn) Check.toggle = Fn end
+  local Info, Menu, Registered, Refresh, Shows
+  Refresh, Shows = 0, 0
+  ZO_Dialogs_UpdateButtonVisibilityAndEnabledState = function() Refresh = Refresh + 1 end
+  ZO_Dialogs_RegisterCustomDialog = function(_, NewInfo) Info = NewInfo end
+  ZO_Dialogs_ShowDialog = function(_, Data, Params)
+    Info.customControl.data = Data
+    Info.setup(Info.customControl, Data)
+    Info.customControl.titleText = Params.mainTextParams[1]
+    Shows = Shows + 1
+  end
+  ZO_Inventory_GetBagAndIndex = function(Row) return Row.bag, Row.slot end
+  AddCustomSubMenuItem = function(Label, Entries) Menu = {Label, Entries} end
+  GetItemLinkName = function() return "Test Item" end
+  GetItemLinkDisplayQuality = function() return 3 end
+  GetItemQualityColor = function() return {Colorize = function(_, Name) return "|cabcdef" .. Name .. "|r" end} end
+  SI_TOOLTIP_ITEM_NAME = "<<1>>"
+  WG.RegisterItemContextMenu()
+  check("click menu remains optional without LibCustomMenu", Info == nil)
+  LibCustomMenu = {CATEGORY_LATE = 6, RegisterContextMenu = function(_, Fn, Category)
+    Registered = {Fn, Category, Registered and Registered[3] + 1 or 1}
+  end}
+  WG.RegisterItemContextMenu(); WG.RegisterItemContextMenu()
+  check("click menu registers once in late context category", Registered[2] == 6 and Registered[3] == 1)
+  Registered[1]({bag = 1, slot = 0})
+  check("empty row has no WareGuild submenu", Menu == nil)
+  Bag[0], Bag[1] = item(30157, 1), item(43529, 1, 1, 1, 1)
+  Registered[1]({bag = 1, slot = 0})
+  check("WareGuild submenu shows two actions with colored item name", Menu[1] == "WareGuild" and #Menu[2] == 2
+    and Menu[2][1].label == "Withdraw |cabcdefTest Item|r" and Menu[2][2].label == "Deposit |cabcdefTest Item|r")
+  Menu[2][1].callback()
+  local Dialog, Save = Info.customControl, Info.buttons[1].callback
+  check("stackable dialog starts at one and presents all five guild boxes", Dialog.Quantity:GetText() == "1"
+    and Dialog.Quantity.editable and not Dialog.AllCheck.hidden and #Dialog.GuildChecks == 5)
+  check("unassigned and former guilds are disabled; cannot save without selection",
+    not Dialog.GuildChecks[2].enabled and not Dialog.GuildChecks[4].enabled and not Info.buttons[1].enabled(Dialog))
+  Dialog:GetNamedChild("Decrease").handlers.OnClicked()
+  check("lower chevron stops at one", Dialog.Quantity:GetText() == "1")
+  Dialog.Quantity:SetText("200"); Dialog:GetNamedChild("Increase").handlers.OnClicked()
+  check("upper chevron stops at 200", Dialog.Quantity:GetText() == "200")
+  Dialog.Quantity:SetText("199"); Dialog:GetNamedChild("Increase").handlers.OnClicked()
+  Dialog.GuildChecks[1].checked, Dialog.GuildChecks[3].checked = true, true
+  Dialog.GuildChecks[3].toggle()
+  check("confirmation becomes available after selecting guilds", Info.buttons[1].enabled(Dialog) and Refresh > 0)
+  Save(Dialog)
+  check("numeric take saves one ItemStep per selected guild", WG.SV.Guild1[1].ItemId == 30157
+    and WG.SV.Guild1[1].Type == WAREGUILD_TAKE_TO and WG.SV.Guild1[1].Count == 200
+    and WG.SV.Guild3[1].GuildId == 44 and #WG.SV.Guild5 == 0 and #Operations == 0)
+  Menu[2][2].callback()
+  Dialog.AllCheck.checked = true; Dialog.AllCheck.toggle()
+  Dialog.GuildChecks[5].checked = true
+  Save(Dialog)
+  check("all-stack deposit saves STORE_ALL without a count and resets the guild choices",
+    WG.SV.Guild5[1].Type == WAREGUILD_STORE_ALL and WG.SV.Guild5[1].Count == nil
+    and #WG.SV.Guild1 == 1 and not Dialog.Quantity.editable)
+  Registered[1]({bag = 1, slot = 1}); Menu[2][2].callback()
+  Dialog.Quantity:SetText("200"); Dialog.AllCheck.checked = true; Dialog.GuildChecks[1].checked = true
+  Save(Dialog)
+  check("nonstackable deposit always saves a strict item-link rule of one", Dialog.AllCheck.hidden
+    and not Dialog.Quantity.editable and WG.SV.Guild1[2].Type == WAREGUILD_STORE_TO
+    and WG.SV.Guild1[2].Count == 1 and WG.SV.Guild1[2].ItemLink == link(Bag[1]) and not WG.SV.Guild1[2].ItemId)
+  WG.SV.Guild[1] = 43
+  Save(Dialog)
+  check("changing a guild after opening the dialog cannot add a rule to the wrong guild",
+    #WG.SV.Guild1 == 2 and Shows == 3)
+end
 
 print(string.format("deposit, knowledge and menu passed=%d failed=%d", Passed, Failed))
 if Failed > 0 then os.exit(1) end

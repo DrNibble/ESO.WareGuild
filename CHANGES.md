@@ -1,5 +1,12 @@
 # CHANGES
 
+## 2026-11-25 - v0.41 (commandes journalières et règles par clic droit)
+
+- **Commandes journalières** : les équipements blancs sans trait doivent satisfaire le journal et correspondre au niveau exact du matériau demandé, y compris hors établi. Le fer niveau 1, la cuprite PC 150 et la cuprite PC 160 ne sont pas interchangeables. WareGuild revalide le niveau au retrait et cherche les matériaux pour la quantité restante si les objets finis sont absents ou si leur niveau est invérifiable. Les premiers niveaux des paliers sont documentés dans le [guide des matériaux UESP](https://en.uesp.net/wiki/Template:Online_Equipment_Crafting_Materials).
+- **Une exécution** : les conditions de fabrication sont traitées pendant la même ouverture de banque, via des transferts successifs. Un objet fini en banque n'est pas décompté plusieurs fois de la même commande. Si des matériaux manquent dans une guilde, les quantités disponibles sont prises et les étapes suivantes continuent tant que les transferts réussissent.
+- **Clic droit, clavier/souris** : avec [LibCustomMenu](https://www.esoui.com/downloads/info1146-LibCustomMenu.htm), le menu « WareGuild » propose « Prendre » et « Déposer » avec le nom de l'objet en couleur. La fenêtre de règle propose une quantité cible de 1 à 200 (ou toutes les piles pour un objet empilable), puis jusqu'à cinq guildes configurées. Les objets non empilables restent à 1 et la règle conserve leur lien complet. La validation ne transfère rien ; elle ajoute une règle dans chaque guilde cochée.
+- **Langues** : anglais, français et chinois. Sans LibCustomMenu, les menus de réglages classiques et les commandes journalières restent disponibles.
+
 ## 2026-11-14 - v0.40 (récupérer les objets inconnus du personnage actif)
 
 **Objectif** : un bouton « Récupérer les objets inconnus du personnage actif » à

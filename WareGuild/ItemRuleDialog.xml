@@ -1,0 +1,53 @@
+<GuiXml>
+    <Controls>
+        <TopLevelControl name="WareGuildItemRuleDialog" inherits="ZO_CustomDialogBase">
+            <Controls>
+                <Label name="$(parent)Title" override="true">
+                    <Dimensions x="440"/>
+                </Label>
+                <Label name="$(parent)Text" inherits="ZO_DialogContentAnchors" font="ZoFontGameMedium"/>
+                <Label name="$(parent)QuantityLabel" font="ZoFontGame" color="INTERFACE_COLOR_TYPE_TEXT_COLORS:INTERFACE_TEXT_COLOR_NORMAL">
+                    <Anchor point="TOPLEFT" relativeTo="$(parent)Text" relativePoint="BOTTOMLEFT" offsetY="12"/>
+                </Label>
+                <Button name="$(parent)Decrease" inherits="ZO_DefaultButton" text="‹">
+                    <Dimensions x="42" y="28"/>
+                    <Anchor point="TOPLEFT" relativeTo="$(parent)QuantityLabel" relativePoint="BOTTOMLEFT" offsetY="4"/>
+                </Button>
+                <Backdrop name="$(parent)QuantityBox" inherits="ZO_SingleLineEditBackdrop_Keyboard">
+                    <Dimensions x="62" y="28"/>
+                    <Anchor point="LEFT" relativeTo="$(parent)Decrease" relativePoint="RIGHT" offsetX="4"/>
+                    <Controls>
+                        <EditBox name="$(parent)Edit" inherits="ZO_DefaultEditForBackdrop"/>
+                    </Controls>
+                </Backdrop>
+                <Button name="$(parent)Increase" inherits="ZO_DefaultButton" text="›">
+                    <Dimensions x="42" y="28"/>
+                    <Anchor point="LEFT" relativeTo="$(parent)QuantityBox" relativePoint="RIGHT" offsetX="4"/>
+                </Button>
+                <Button name="$(parent)All" inherits="ZO_CheckButton">
+                    <Anchor point="LEFT" relativeTo="$(parent)Increase" relativePoint="RIGHT" offsetX="20"/>
+                </Button>
+                <Label name="$(parent)Guilds" font="ZoFontGame" color="INTERFACE_COLOR_TYPE_TEXT_COLORS:INTERFACE_TEXT_COLOR_NORMAL">
+                    <Anchor point="TOPLEFT" relativeTo="$(parent)Decrease" relativePoint="BOTTOMLEFT" offsetY="14"/>
+                </Label>
+                <Button name="$(parent)Guild1" inherits="ZO_CheckButton">
+                    <Anchor point="TOPLEFT" relativeTo="$(parent)Guilds" relativePoint="BOTTOMLEFT" offsetY="6"/>
+                </Button>
+                <Button name="$(parent)Guild2" inherits="ZO_CheckButton">
+                    <Anchor point="TOPLEFT" relativeTo="$(parent)Guild1" relativePoint="BOTTOMLEFT" offsetY="2"/>
+                </Button>
+                <Button name="$(parent)Guild3" inherits="ZO_CheckButton">
+                    <Anchor point="TOPLEFT" relativeTo="$(parent)Guild2" relativePoint="BOTTOMLEFT" offsetY="2"/>
+                </Button>
+                <Button name="$(parent)Guild4" inherits="ZO_CheckButton">
+                    <Anchor point="TOPLEFT" relativeTo="$(parent)Guild3" relativePoint="BOTTOMLEFT" offsetY="2"/>
+                </Button>
+                <Button name="$(parent)Guild5" inherits="ZO_CheckButton">
+                    <Anchor point="TOPLEFT" relativeTo="$(parent)Guild4" relativePoint="BOTTOMLEFT" offsetY="2"/>
+                </Button>
+                <Control name="$(parent)Cancel" inherits="ZO_CustomDialogButton"/>
+                <Control name="$(parent)Confirm" inherits="ZO_CustomDialogButton"/>
+            </Controls>
+        </TopLevelControl>
+    </Controls>
+</GuiXml>

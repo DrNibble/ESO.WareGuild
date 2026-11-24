@@ -38,6 +38,14 @@ WG.Lang = {
   ["CHAT_STORE_ALL_TYPE"] = "存储所有 <<1>> 材料", -- <<1>> Craft Type
   
   ["CHAT_DAILY_WRITS"] = "尝试取出 日常制造 材料/物品",
+  ["CONTEXT_TAKE"] = "取出 <<1>>",
+  ["CONTEXT_STORE"] = "存入 <<1>>",
+  ["CONTEXT_TAKE_COUNT"] = "背包中的目标数量",
+  ["CONTEXT_STORE_COUNT"] = "公会银行中的目标数量",
+  ["CONTEXT_ALL"] = "所有堆叠",
+  ["CONTEXT_GUILDS"] = "为以下公会添加规则：",
+  ["CONTEXT_NO_GUILD"] = "未设置公会",
+  ["CONTEXT_SAVE"] = "添加规则",
   
   ["CHAT_NE_TAKE"] = "[<<1>>] 取出 <<2>> 时，数量不足", -- <<1>> Guild Name, <<2>> ItemName
   ["CHAT_NE_STORE"] = "[<<1>>] 存储 <<2>> 时，数量不足", -- <<1>> Guild Name, <<2>> ItemName
@@ -61,7 +69,7 @@ WG.Lang = {
   ["CHAT_WITHDRAW_LEVEL"] = "等级不匹配：需要 <<1>> / CP <<2>>，实际 <<3>> / CP <<4>>",
   ["CHAT_WITHDRAW_CONDITION"] = "物品不满足任务日志条件",
   ["CHAT_WITHDRAW_NOTICE"] = "[<<1>>] <<2>>：<<3>>。",
-  ["CHAT_WITHDRAW_REFERENCE"] = "在制造台之外无法获取参考制造等级；不比较精确等级，由任务日志条件验证材料等级",
+  ["CHAT_WITHDRAW_REFERENCE"] = "无法确认所需的制造等级；改为寻找材料",
   ["CHAT_WITHDRAW_DATA"] = "WareGuild 缺少物品与制造材料的对应数据",
   ["CHAT_WITHDRAW_NOT_FOUND"] = "此银行中没有匹配物品；请检查此步骤所选的公会",
   ["CHAT_WITHDRAW_DISABLED"] = "成品取出功能已禁用；改为寻找材料",
